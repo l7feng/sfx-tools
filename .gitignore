@@ -1,0 +1,22 @@
+node_modules/
+target/
+dist/
+build/
+*.log
+.env
+.env.*
+
+# Keep machine runtime, credentials and generated caches local.
+__pycache__/
+*.py[cod]
+*.sqlite*
+*.db
+*.dpapi
+*.pem
+*.key
+*.pfx
+*.p12
+.env
+.env.*
+src-tauri/gen/
+UserData/

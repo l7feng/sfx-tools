@@ -1,0 +1,4 @@
+# 独立CPU推理环境；完整安装快照见build/s2-s3-validation/ai-requirements.lock.txt。
+onnxruntime==1.23.2
+tokenizers==0.22.2
+numpy==2.3.4

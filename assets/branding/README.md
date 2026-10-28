@@ -1,0 +1,5 @@
+# Sound Workbench 图标
+
+2026-10-28，公司电脑MS001，使用imagegen技能和内置image_gen生成，全新原创方向：深石墨圆角底板、暖金色连续声波，保持桌面小尺寸识别。最终原图sound-workbench-master.png；Tauri icon命令生成多尺寸ICO，项目采用icon.ico及256px PNG。首稿中线容易产生货币符号联想，已改成纯横向声波，无字样。没有使用原SoundSeeker图标。
+
+最终生成提示：One polished professional audio workstation Windows app icon, square 1024x1024. Deep charcoal matte rounded-square tile, transparent corners. Center a bold warm champagne gold emblem: a continuous smooth horizontal audio waveform folded into an abstract sideways S, with two broad curved lobes and generous dark negative space; asymmetric waveform sweeps left to right. Crisp minimal silhouette readable at 32px, restrained satin metal tonal depth. NO vertical line through the emblem, NO dollar sign, NO currency symbol, NO treble clef, no letters or words, no headphones, no musical note, no equalizer bars, no thin detailing, no glow, no neon. Premium studio equipment aesthetic, understated, technical, balanced margins. A final single app icon, not a mockup or grid.

@@ -1,0 +1,14 @@
+{
+  "schema": "sound-workbench-audio-evaluation-v1",
+  "status": "not_run",
+  "purpose": "人工标注中文音频语义查询与参考音频；不使用文件名标签替代音频语义效果",
+  "queries": [
+    {"query":"雨落在金属屋顶上","relevant_asset_ids":[],"notes":"待人工标注"},
+    {"query":"远处低沉的爆炸声","relevant_asset_ids":[],"notes":"待人工标注"},
+    {"query":"安静室内有人轻轻走动","relevant_asset_ids":[],"notes":"待人工标注"},
+    {"query":"发动机启动后加速","relevant_asset_ids":[],"notes":"待人工标注"},
+    {"query":"玻璃碎裂的清脆声音","relevant_asset_ids":[],"notes":"待人工标注"}
+  ],
+  "metrics": {"top_10_hit_rate":null,"mean_reciprocal_rank":null},
+  "warning": "未经标注与实际音频模型运行，不得填写分数或声明语义质量通过"
+}

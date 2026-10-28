@@ -1,0 +1,22 @@
+.catalog-shell .sidebar{width:min(var(--sidebar-width,258px),30vw)}
+.catalog-shell .inspector{width:min(var(--inspector-width,282px),32vw)}
+.catalog-shell .real-wave-area{height:min(var(--wave-height,80px),30vh)}
+.resize-handle{position:relative;flex-shrink:0;touch-action:none;user-select:none;background:var(--line);z-index:2}
+.resize-handle:hover,.resize-handle:focus-visible{background:var(--accent)}
+.resize-x{width:6px;cursor:col-resize;min-height:44px}
+.resize-y{height:6px;cursor:row-resize;width:100%}
+.resize-handle:before{content:'';position:absolute;inset:-4px}
+.catalog-shell th{position:sticky;overflow:visible}
+.catalog-shell th .resize-handle{position:absolute;top:0;right:0;bottom:0;width:8px;min-height:34px;background:transparent}
+.catalog-shell th .resize-handle:hover,.catalog-shell th .resize-handle:focus-visible{background:var(--accent)}
+.catalog-shell .asset-scroll table td{overflow:hidden;text-overflow:ellipsis}
+.catalog-shell .asset-name strong,.catalog-shell .asset-name small{max-width:100%;width:100%;user-select:none}
+.catalog-shell .asset-name{min-width:0}
+.asset-actions{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:0 20px 8px;font-size:11px;color:var(--muted)}
+.asset-actions>span{margin-right:auto}.asset-actions button{font-size:11px;padding:0 8px;border:1px solid var(--line)}
+.relocate-panel{padding:12px 20px;background:var(--raised);font-size:11px;max-height:240px;overflow:auto;border-block:1px solid var(--line)}
+.relocate-panel label{display:block;margin-top:8px}.relocate-panel input{width:100%;margin-top:6px}.relocate-panel small{display:block;overflow-wrap:anywhere}
+.catalog-shell .filterbar{flex-wrap:wrap}.catalog-shell .rate-col{display:table-cell}
+.catalog-shell .statusbar>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:1000px){.catalog-shell .sidebar{width:min(var(--sidebar-width),22vw)}.catalog-shell .inspector{width:min(var(--inspector-width),28vw)}}
+@media(max-width:760px){.catalog-shell .sidebar,.catalog-shell .inspector{width:100%}.workspace>.resize-x{display:none}}

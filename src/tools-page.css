@@ -1,0 +1,14 @@
+.tool-hub [hidden]{display:none!important}
+.tool-hub-heading,.tool-selection{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.tool-hub-heading h1{font-size:20px;margin:0}.tool-hub-heading p,.tool-content-heading p{color:var(--muted);font-size:12px;margin:8px 0}
+.tool-selection{background:var(--raised);border:1px solid var(--line);border-left:2px solid var(--accent);padding:10px 12px;margin:14px 0}
+.tool-selection>div{min-width:0;display:grid;gap:5px}.tool-selection strong{font-size:12px}.tool-selection span{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.tool-selection button{flex-shrink:0}
+.tool-directory{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:9px;margin:14px 0}
+.workspace-v2 .tool-directory button{display:flex;align-items:flex-start;justify-content:flex-start;flex-direction:column;text-align:left;padding:12px;gap:8px;background:var(--panel);border:1px solid var(--line);min-width:0;border-radius:4px}
+.tool-directory strong{font-size:13px;font-weight:500}.tool-directory span{font-size:12px;color:var(--muted);line-height:1.65}
+.tool-directory button:hover,.tool-directory button[aria-pressed=true]{border-color:var(--accent);background:var(--accent-wash)}
+.tool-directory.is-compact{display:flex;flex-wrap:wrap;gap:6px}.workspace-v2 .tool-directory.is-compact button{padding:7px 10px}.tool-directory.is-compact strong{font-size:12px}
+.tool-content-heading{border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px}.tool-content-heading h2,.tool-overview h2{font-size:14px;font-weight:500}
+.tool-overview{border-top:1px solid var(--line);padding-top:14px}.tool-overview p{color:var(--muted);font-size:12px;line-height:1.8}.tool-search-feedback{font-size:12px;color:var(--muted);margin:10px 0}.tool-search-feedback button{margin-left:10px}
+.tool-hub button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.tool-hub .utility-panel p{font-size:12px;line-height:1.75}
+@media(max-width:760px){.audio-tools-page.tool-hub{padding:12px}.tool-directory{grid-template-columns:repeat(auto-fit,minmax(175px,1fr))}.tool-selection{align-items:flex-start;flex-wrap:wrap}}
