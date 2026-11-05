@@ -1,6 +1,6 @@
-# 音效管理工作台（Sound Workbench）
+# SFX Tools（音效与音乐素材工作台）
 
-当前同步 0.1.12 开发源码，仅用于私有开发。可运行版本入口：`D:/Ai-Files/Repos/GitHub/sound-workbench/src-tauri/target/debug/sound-workbench.exe`（debug/no-bundle，非安装包）。源码构建及验证入口见下文。首次 Git 提交从本次源码快照开始，不包含本机素材库、账号数据及构建缓存。
+当前同步 0.1.13 开发源码，仅用于私有开发。可运行版本入口：`D:/Ai-Files/Repos/GitHub/sound-workbench/src-tauri/target/debug/sfx-tools.exe`（debug/no-bundle，非安装包）。源码构建及验证入口见下文。首次 Git 提交从本次源码快照开始，不包含本机素材库、账号数据及构建缓存。
 
 音效管理软件独立重写，开发代号。当前推进二三期功能及0.1.5底部工具/完整波形，实际验证与当前状态以知识库Documentation为准；下文旧阶段内容保留为历史记录。
 
@@ -153,3 +153,14 @@
 - 版本升至 0.1.12；EXE ProductVersion 0.1.12，24943616 字节，写入时间 2026/11/05 15:08:14。
 
 边界：中文评测指标仍为零产出（评测集 expected 全空，需人工标注）；BWF 面板未做真实 GUI 手测，仅用本机 FFmpeg 生成的 BWF 验证，Soundminer/PT 导出文件未对照；只透传 `axml`/`chna`/`cart`/`ds64` 不解析语义；AAF/OMF 与 PT Spotting 未开始；许可声明仍为工作稿，`bundle.active` 未开启。
+## 0.1.13 更名 SFX Tools 与 EXE 版本信息补全
+
+按人类指令「改名为 SFX Tools，exe 不管在哪都要有版本信息，更新后检查波形」。
+
+- 更名范围到文件名：`productName` → `SFX Tools`，Cargo 包名与 npm 包名 → `sfx-tools`，产物由 `sound-workbench.exe` 变为 **`sfx-tools.exe`**；窗口标题、侧栏品牌（`SFX TOOLS`）、关于页、`document.title`、`index.html` 标题、单实例窗口匹配串、`verify.ps1` 的结束进程路径同步更新。桌面快捷方式已重建为 `SFX Tools.lnk` 指向新 exe，旧的 `Sound Workbench.lnk` 已移入回收站。
+- EXE 版本资源补齐（来源：`tauri.conf.json` 的 `bundle.publisher` / `bundle.copyright` + `productName`）：`ProductName=SFX Tools`、`FileDescription=SFX Tools`、`CompanyName=SFX Tools`、`LegalCopyright=© 2026 SFX Tools`、`FileVersion/ProductVersion=0.1.13`。此前 CompanyName 取自 identifier 第二段（soundworkbench）、版权为空。
+- 数据目录与目录库**刻意保持不变**：identifier 仍为 `local.soundworkbench.desktop`，`%LOCALAPPDATA%` 下的目录库、向量索引、模型登记不受更名影响，避免既有素材索引丢失。
+- 波形：0.1.11 的修复保持原样（`player.rs` 用 `Mutex<()>` 在 `spawn_blocking` 内排队、`waveform-data.ts` 队列 64 + `withWaveformRetry` 仅对瞬时竞争退避），本轮未改波形代码；Rust 152 项与前端波形 9 项测试通过。真实 GUI 表现待人类手测。
+- 验证：Rust 152 通过 / 6 忽略 / 0 失败（既有偶发超时本轮通过）；前端 tsc + Vite 通过；EXE ProductVersion 0.1.13，24943616 字节，写入时间 2026/11/05 15:51:18；未生成安装包。
+
+边界：更名只覆盖工程与应用界面、快捷方式；知识库历史文档中的旧名按存证保留。`OriginalFilename` 字段 tauri-build 不写入，属性里为空。未做真实 GUI 手测（人类安排后测）。

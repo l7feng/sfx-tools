@@ -43,7 +43,7 @@ function App(){
  const select=(a:Asset)=>{setSelected(a.id);setPosition(0);setPlaying(false);};
  const toggleFavorite=(id:number)=>{setFavorites(old=>{const next=new Set(old);next.has(id)?next.delete(id):next.add(id);return next;});};
  const togglePlay=()=>{setPlaying(v=>!v);if(position>=current.duration)setPosition(0);};
- useEffect(()=>{document.title='Sound Workbench · S1.1 界面样稿';},[]);
+ useEffect(()=>{document.title='SFX Tools · S1.1 界面样稿';},[]);
  useEffect(()=>{if(dialog)dialogRef.current?.showModal();else dialogRef.current?.close();},[dialog]);
  useEffect(()=>{if(!playing)return;const timer=window.setInterval(()=>setPosition(p=>p+.1>=current.duration?(loop?0:current.duration):p+.1),100);return()=>clearInterval(timer);},[playing,current.duration,loop]);
  useEffect(()=>{if(playing&&!loop&&position>=current.duration)setPlaying(false);},[position,playing,loop,current.duration]);
@@ -64,7 +64,7 @@ function App(){
  useEffect(()=>{tableRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({block:'nearest'});},[selected]);
  const categories=['自然环境','城市生活','拟音动作','机械装置','设计音效'];
  return <div className="app-shell">
- <header className="topbar"><div className="brand"><span className="brand-icon"><Icon name="wave" size={24}/></span><strong>SOUND<span>WORKBENCH</span></strong></div><div className="top-divider"/><span className="workspace-title">声音素材工作台</span><span className="prototype">S1.1 · 交互样稿</span><div className="top-right"><a href="?catalog">素材目录</a><span className="demo-label">模拟素材 · 无实际音频输出</span><button aria-label="使用帮助" onClick={()=>setDialog('help')}><Icon name="help"/></button></div></header>
+ <header className="topbar"><div className="brand"><span className="brand-icon"><Icon name="wave" size={24}/></span><strong>SFX<span> TOOLS</span></strong></div><div className="top-divider"/><span className="workspace-title">声音素材工作台</span><span className="prototype">S1.1 · 交互样稿</span><div className="top-right"><a href="?catalog">素材目录</a><span className="demo-label">模拟素材 · 无实际音频输出</span><button aria-label="使用帮助" onClick={()=>setDialog('help')}><Icon name="help"/></button></div></header>
  <div className="workspace">
  <aside className="sidebar"><div className="sidebar-label">工作空间 <span>LOCAL</span></div><nav aria-label="素材范围">{['全部素材','我的收藏'].map((s,i)=><button key={s} className={'nav-item '+(scope===s?'active':'')} aria-current={scope===s?'page':undefined} onClick={()=>setScope(s)}><Icon name={i?'star':'library'}/><span>{s}</span><b>{i?favorites.size:assets.length}</b></button>)}<div className="sidebar-label library-label">素材分类 <span>05</span></div>{categories.map(c=><button key={c} className={'nav-item '+(scope===c?'active':'')} aria-current={scope===c?'page':undefined} onClick={()=>setScope(c)}><Icon name="folder"/><span>{c}</span><b>{assets.filter(a=>a.category===c).length}</b></button>)}</nav>
  <div className="sidebar-bottom"><div className="library-note"><span className="online-dot"/> 本地素材库<p>12 条演示素材<br/>仅演示当前窗口的操作</p></div><button className="add-library" onClick={()=>{setImportChoice('');setPreview(false);setDialog('import');}}><Icon name="plus"/> 添加素材库</button><button className="help-link" onClick={()=>setDialog('help')}>键盘快捷键 <kbd>?</kbd></button></div></aside>

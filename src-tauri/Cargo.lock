@@ -3175,6 +3175,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "sfx-tools"
+version = "0.1.13"
+dependencies = [
+ "drag",
+ "rodio",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "symphonia",
+ "tauri",
+ "tauri-build",
+ "uuid",
+ "windows 0.62.2",
+]
+
+[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3257,23 +3274,6 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "sound-workbench"
-version = "0.1.12"
-dependencies = [
- "drag",
- "rodio",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "symphonia",
- "tauri",
- "tauri-build",
- "uuid",
- "windows 0.62.2",
 ]
 
 [[package]]

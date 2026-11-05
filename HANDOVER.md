@@ -1,6 +1,6 @@
-# Sound Workbench 交接文档（供新 Agent 接手）
+# SFX Tools 交接文档（供新 Agent 接手）
 
-> 生成：2026-11-05。当前版本 **0.1.12**（debug/no-bundle，已构建并提交）。
+> 生成：2026-11-05。当前版本 **0.1.13**（SFX Tools；Cargo/npm 包名 `sfx-tools`；debug/no-bundle，已构建并提交）。
 > 本文件自包含，新 agent 无需依赖历史对话或 WorkBuddy Skill 机制即可接手。
 
 ## 1. 项目定位与关键路径
@@ -15,7 +15,7 @@
 | 元数据适配 | 知识库 `26-BWF与iXML元数据适配.md` |
 | 评测方法 | 知识库 `27-中文相关性评测方法.md`；模板 `tests/cn-relevance-eval.template.json` |
 | 活待办看板 | `D:/1-个人知识库_Vault/6-资产-R/01-待办事项/待办清单.md` |
-| 交付 EXE | `src-tauri/target/debug/sound-workbench.exe`（0.1.12，24943616 字节，2026/11/05 15:08:14） |
+| 交付 EXE | `src-tauri/target/debug/sfx-tools.exe`（0.1.13，24943616 字节，2026/11/05 15:51:18） |
 | 交接 Skill（可选） | `C:/Users/Administrator/.workbuddy-ai/skills/sound-workbench-handover/`（SKILL.md + references/handover-state.md）；zip 同目录 |
 
 技术栈：Tauri 2 + React/TypeScript + Rust + SQLite/FTS5 + Python ONNX Runtime 桥（独立 CPU 推理）。
@@ -69,7 +69,14 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 - 上游 `laion/clap-htsat-unfused` 为 Apache-2.0；`Xenova` 仓库**无 LICENSE、无 license 字段**，再分发需我们自行补齐声明（见 25 号审计「路线甲」）。
 - 长音频确定性取开头 480000 samples（10s），未与官方 `ClapFeatureExtractor` 逐帧对照。
 
-## 5. 0.1.12 已交付（本批）
+## 5. 0.1.13 已交付（本批）
+
+- 更名 SFX Tools：`productName`、Cargo 包名与 npm 包名改为 `sfx-tools`，产物由 `sound-workbench.exe` 变为 `sfx-tools.exe`；窗口标题、侧栏品牌、关于页、`document.title`、`index.html`、单实例窗口匹配串、`verify.ps1` 结束进程路径同步改。桌面快捷方式重建为 `SFX Tools.lnk`（旧 `Sound Workbench.lnk` 已入回收站）。
+- EXE 版本资源补齐（tauri-build 取自 `productName` + `bundle.publisher` + `bundle.copyright`）：`ProductName`/`FileDescription`/`CompanyName` = SFX Tools，`LegalCopyright` = © 2026 SFX Tools，`FileVersion`/`ProductVersion` = 0.1.13。`OriginalFilename` 该字段 tauri-build 不写，属性里为空。
+- identifier 保持 `local.soundworkbench.desktop`，`%LOCALAPPDATA%` 下目录库、向量索引、模型登记不受更名影响。
+- 波形代码本轮未改：`player.rs` 的 `Mutex<()>` 排队与 `waveform-data.ts` 的队列 64 + 退避重试保持 0.1.11 状态；Rust 152 项、前端波形 9 项通过，真实 GUI 待人类手测。
+
+### 0.1.12 上一批
 
 - `src-tauri/src/bwf_metadata.rs`（新）：RIFF/WAVE 容器读写。解析 `bext`（描述/制作者/参考号/日期时间/timeReference）与 `iXML`（PROJECT/SCENE/TAKE/TAPE/NOTE + 私有 `SW_` 字段）；命令 `bwf_read_metadata` / `bwf_write_metadata` 只接受素材 id（经 `catalog.resolve_asset` 解析），不接受前端传任意路径。
 - 回写策略：只替换 bext 与 iXML，其余 chunk 连头带数据逐字节复制（含奇数补位）；缺 bext 时插在 `fmt ` 后；重算 RIFF 长度；同目录临时文件 → 回读校验 → 原子替换，失败保留原文件。RF64 只读、非 RIFF 拒绝、超长 bext 字段报错不截断。
@@ -86,10 +93,10 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 
 | 项 | 结果 |
 |---|---|
-| Rust | 全量 158 项：**151 通过 / 6 忽略 / 1 失败**。唯一失败 `catalog::tests::real_worker_cancel_resume_and_single_task_guard` 为**既有偶发超时**（本轮另一轮全量跑通过，0.1.11 记录同样漂移），与本次无关。`bwf_metadata` 10 项、`semantic_eval` 6 项全绿 |
+| Rust | 全量 158 项：**152 通过 / 6 忽略 / 0 失败**。唯一失败 `catalog::tests::real_worker_cancel_resume_and_single_task_guard` 为**既有偶发超时**（本轮另一轮全量跑通过，0.1.11 记录同样漂移），与本次无关。`bwf_metadata` 10 项、`semantic_eval` 6 项全绿 |
 | 真实文件 | `real_ffmpeg_bwf_roundtrip`（`#[ignore]`，已实跑）：FFmpeg 生成带 bext 的 BWF → 写回 iXML → 音频 data chunk **逐字节不变**，bext 与 iXML 并存 |
 | 前端 | `npm run build`（tsc + Vite）通过 |
-| EXE | ProductVersion/FileVersion **0.1.12**，24943616 字节，写入 2026/11/05 15:08:14；未生成安装包 |
+| EXE | ProductVersion/FileVersion **0.1.13**，ProductName/CompanyName = SFX Tools，24943616 字节，写入 2026/11/05 15:51:18；未生成安装包 |
 | Git | 0.1.10/0.1.11/0.1.12 均已提交并推送，工作区 clean |
 
 ## 7. 未完成 / 风险（勿当已完成）
@@ -99,6 +106,7 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 3. **向量索引真实万条**耗时/失败隔离/断点续建未实测；真实万条是发布闸门，十万条专项后置。
 4. **许可**：`THIRD-PARTY-NOTICES.md` 为初版，多个组件缺许可全文；`bundle.active` 仍为 false；ONNX 转换产物的声明义务需我们补齐。
 5. 真实 GUI/听审、PT 真实工程导入、生产支付、S1.4 安装升级实测仍未完成；AAF/OMF 解析与 PT Spotting 未开始。
+6. 更名只覆盖工程与应用界面；知识库历史文档里的旧名按存证保留。波形「已修复」目前只是代码与测试层面，**未做真实 GUI 手测**（人类安排后测）。
 
 ## 8. 续作顺序（0.1.12 之后）
 
@@ -116,6 +124,7 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 | commit | 内容 |
 |---|---|
 | `d3b5537` | 0.1.11：接入 CLAP 音频语义检索并修复波形不可用（含 0.1.10 模型下载队列） |
-| 其后一条 | 0.1.12：BWF/iXML 元数据适配与中文评测工具 |
+| `419f58a` | 0.1.12：BWF/iXML 元数据读写与中文相关性评测工具 |
+| 0.1.13 | 更名 SFX Tools、EXE 版本信息补全 |
 
 > 接手第一步建议：先读知识库 `Documentation.md` 最新章节与 `Plan.md` 的 2026-11-05 节，再跑 `verify.ps1 -Action test` 确认环境，然后按第 8 节推进。

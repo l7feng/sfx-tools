@@ -17,7 +17,7 @@ function App(){
   }
   void executeProbe(lock.current,command,args,(cmd,input)=>invoke<string>(cmd,input),receive,setBusy);
  }
- return <main aria-busy={busy}><header><span>SOUND WORKBENCH / S1.0</span><h1>原生能力验证</h1><a href="?">返回素材工作台</a><p>工程验证窗口。每次只执行一个请求；记录仅保留在本窗口，关闭后不保存。</p></header>
+ return <main aria-busy={busy}><header><span>SFX TOOLS / S1.0</span><h1>原生能力验证</h1><a href="?">返回素材工作台</a><p>工程验证窗口。每次只执行一个请求；记录仅保留在本窗口，关闭后不保存。</p></header>
  <section><h2>01 · 桌面通路</h2><button disabled={busy} onClick={()=>run("native_info")}>检查 Rust 原生调用</button></section>
  <section><h2>02 · 声卡输出</h2><p>播放 0.5 秒、低音量 440 Hz 合成测试音。请确认耳机或音箱音量。</p><button disabled={busy} onClick={()=>run("test_tone")}>播放测试音</button></section>
  <section><h2>03 · 文件解码与播放</h2><label htmlFor="sample-path">测试音频的完整路径</label><input id="sample-path" value={path} onChange={e=>{setPath(e.target.value);setInputError("");}} placeholder="D:/Ai-Files/Repos/GitHub/sound-workbench/build/s1-samples/pcm-44100.wav" disabled={busy} spellCheck={false} aria-invalid={!!inputError} aria-describedby="path-help path-error"/><p id="path-help">仅使用专用测试样本。支持粘贴带双引号的完整路径；输入存在不代表文件已验证。最多分析或播放前 3 秒，不改写文件。</p><p id="path-error" className="error" role="alert">{inputError}</p>

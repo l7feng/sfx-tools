@@ -24,8 +24,8 @@ if($Action -eq 'check'){
     & $cargo test --manifest-path src-tauri/Cargo.toml
 }elseif($Action -eq 'build'){
     # 人类已授权：只结束核对为本工程EXE的进程，其他应用不在范围内。
-    $workbenchExe=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'src-tauri/target/debug/sound-workbench.exe'))
-    Get-Process sound-workbench -ErrorAction SilentlyContinue | Where-Object {[string]::Equals($_.Path,$workbenchExe,[StringComparison]::OrdinalIgnoreCase)} | Stop-Process -Force -ErrorAction Stop
+    $workbenchExe=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'src-tauri/target/debug/sfx-tools.exe'))
+    Get-Process sfx-tools -ErrorAction SilentlyContinue | Where-Object {[string]::Equals($_.Path,$workbenchExe,[StringComparison]::OrdinalIgnoreCase)} | Stop-Process -Force -ErrorAction Stop
     $runtimeFfmpeg=Get-Command ffmpeg -ErrorAction SilentlyContinue
     if($runtimeFfmpeg){$env:SW_FFMPEG_PATH=$runtimeFfmpeg.Source}
     npm run tauri -- build --debug --no-bundle

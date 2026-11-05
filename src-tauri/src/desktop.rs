@@ -9,9 +9,9 @@ pub fn startup_guard() -> Result<Option<fs::File>,String> {
         None=>{
             #[cfg(windows)] unsafe {
                 use windows::{core::w,Win32::UI::WindowsAndMessaging::*};
-                if let Ok(window)=FindWindowW(None,w!("Sound Workbench · 素材目录")){
+                if let Ok(window)=FindWindowW(None,w!("SFX Tools · 素材目录")){
                     let _=ShowWindow(window,SW_RESTORE);let _=SetForegroundWindow(window);
-                }else{message("Sound Workbench 已在运行或正在启动，请切换到已有窗口。");}
+                }else{message("SFX Tools 已在运行或正在启动，请切换到已有窗口。");}
             }
             Ok(None)
         },
@@ -30,7 +30,7 @@ fn visible_path(path:&std::path::Path)->String{
 pub fn message(text:&str){
     #[cfg(windows)] unsafe{
         use windows::{core::HSTRING,Win32::UI::WindowsAndMessaging::*};
-        let _=MessageBoxW(None,&HSTRING::from(text),&HSTRING::from("Sound Workbench"),MB_OK|MB_ICONINFORMATION);
+        let _=MessageBoxW(None,&HSTRING::from(text),&HSTRING::from("SFX Tools"),MB_OK|MB_ICONINFORMATION);
     }
     #[cfg(not(windows))] eprintln!("{text}");
 }

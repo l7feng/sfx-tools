@@ -1,6 +1,6 @@
 {
-  "name": "sound-workbench",
-  "version": "0.1.12",
+  "name": "sfx-tools",
+  "version": "0.1.13",
   "private": true,
   "type": "module",
   "scripts": {
