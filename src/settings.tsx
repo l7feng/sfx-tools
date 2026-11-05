@@ -9,6 +9,6 @@ export function Settings({open,onClose,value,onChange,onResetLayout,onOpenTool}:
  {tab==='playback'&&<><h3>音频试听</h3><label>默认试听音量 <strong>{value.volume}%</strong><input type="range" min="0" max="100" value={value.volume} onChange={event=>onChange({...value,volume:Number(event.target.value)})}/></label><p>使用系统默认输出。点击素材名称只选中；点击小波形或播放按钮才试听。小波形只在已分析范围内定位。</p></>}
  {tab==='library'&&<><h3>素材库</h3><label>启动页面<select value={value.startPage} onChange={event=>onChange({...value,startPage:event.target.value as Preferences['startPage']})}><option value="sound">音效库</option><option value="music">音乐库</option><option value="tools">音频工具</option></select></label><p>音效库和音乐库各自管理来源关系。相同文件可在两库引用，共用素材ID和标注；添加路径不会复制、移动或改写音频。</p><p>在顶栏切换库后添加文件夹，或将已选素材加入另一个库。</p></>}
  {tab==='tools'&&<><h3>模型与账号</h3><p>从这里可直接进入工具页面，不会启动模型下载或开发服务。</p><button onClick={()=>onOpenTool('acoustic')}>声学索引与模型管理</button><button onClick={()=>onOpenTool('account')}>账号、设备与离线授权</button><p>音频语义模型推理和下载管理尚未实现；账号当前只连接手动启动的本地开发服务。</p></>}
- {tab==='about'&&<><h3>Sound Workbench · 0.1.9</h3><p>本地素材工作台。管理音效与音乐原路径引用，支持定位试听、标签、收藏与制作工具。</p><p>AI文本检索与Pro Tools连接预览位于“音频工具”页面。</p></>}
+ {tab==='about'&&<><h3>Sound Workbench · 0.1.11</h3><p>本地素材工作台。管理音效与音乐原路径引用，支持定位试听、标签、收藏与制作工具。</p><p>AI文本检索与Pro Tools连接预览位于“音频工具”页面。</p></>}
  </section></div><footer><button onClick={onClose}>完成</button></footer></dialog>;
 }

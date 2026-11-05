@@ -19,7 +19,7 @@ export function ToolsPage({native,ids,selected,library,query,active,onNavigate,o
    {matches.map(tool=><button key={tool.id} aria-pressed={active===tool.id} onClick={()=>{onClearQuery();onNavigate(tool.id);}}><strong>{tool.label}</strong>{(!active||searching)&&<span>{tool.description}</span>}</button>)}
   </nav>
   {searching&&<div className="tool-search-feedback" role="status">{matches.length?`找到 ${matches.length} 项工具，点击进入。`:'没有匹配的工具。'}<button onClick={onClearQuery}>清除工具搜索</button></div>}
-  {!active&&<section className="tool-overview"><h2>功能与入口</h2><p>分类按钮始终可达，不再把所有工具堆在长页面中。选择素材后进入相应工具；检查重复、模型登记和账号不要求选择素材。</p><p>音频语义模型推理、模型下载管理、AAF/OMF解析和外部插件宿主尚未实现；账号与订单当前仅为本地开发流程。界面中的状态会说明所需条件。</p></section>}
+  {!active&&<section className="tool-overview"><h2>功能与入口</h2><p>分类按钮始终可达，不再把所有工具堆在长页面中。选择素材后进入相应工具；检查重复、模型登记和账号不要求选择素材。</p><p>模型下载队列（固定版本、断点续传、SHA256校验、取消）与CLAP双塔ONNX张量自检已接入“声学内容检索”页；音频内容语义推理、中文相关性评测、AAF/OMF解析和外部插件宿主尚未实现；账号与订单当前仅为本地开发流程。界面中的状态会说明所需条件。</p></section>}
   <div hidden={!active}>
    <header className="tool-content-heading"><h2>{page?.label}</h2><p>{page?.description}</p>{searching&&<p>正在显示已打开的工具；上方搜索只筛选入口，不会中断当前任务。</p>}</header>
    <div hidden={active!=='acoustic'}><AudioIntelligence native={native} ids={ids} library={library} onPick={onPick}/></div>

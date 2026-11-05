@@ -13,6 +13,9 @@ mod full_wave;
 mod audio_tools;
 mod audio_index;
 mod model_registry;
+mod model_download;
+mod audio_text;
+mod semantic_vector;
 mod visual_analysis;
 mod licensing;
 mod workbench_jobs;
@@ -29,6 +32,8 @@ fn main() {
         .setup(|app| {
             let data = app.path().app_local_data_dir()?;
             std::fs::create_dir_all(&data)?;
+            let audio_text_dir = data.join("audio-text-v1");
+            std::fs::create_dir_all(&audio_text_dir)?;
             let state = catalog::CatalogState::new(data.join("catalog.sqlite"))
                 .map_err(std::io::Error::other)?;
             app.manage(state);
@@ -38,6 +43,9 @@ fn main() {
             app.manage(layer_render::LayerRenderState::new(app.path().app_cache_dir()?.join("layer-renders-v1")));
             app.manage(audio_index::AudioIndexState::new(data.join("audio-index-v1")));
             app.manage(model_registry::ModelRegistryState::new(data.join("model-registry-v1")));
+            app.manage(model_download::ModelDownloadState::new(data.join("model-downloads-v1")));
+            app.manage(audio_text::AudioTextState::new(audio_text_dir));
+            app.manage(semantic_vector::SemanticVectorState::new(data.join("semantic-vector-v1")));
             app.manage(visual_analysis::VisualAnalysisState::new(app.path().app_cache_dir()?.join("visual-analysis-v1")));
             app.manage(licensing::LicenseState::new(data.join("licensing-v1")));
             app.manage(workbench_jobs::WorkbenchJobsState::new(app.path().app_cache_dir()?.join("library-maintenance-v1")));
@@ -106,6 +114,17 @@ fn main() {
             audio_index::audio_index_search,
             model_registry::model_registry_list,
             model_registry::model_registry_verify,
+            model_download::model_download_list,
+            model_download::model_download_start,
+            model_download::model_download_status,
+            model_download::model_download_cancel,
+            audio_text::audio_text_status,
+            audio_text::audio_text_selftest,
+            semantic_vector::semantic_vector_build,
+            semantic_vector::semantic_vector_status,
+            semantic_vector::semantic_vector_cancel,
+            semantic_vector::semantic_vector_search_text,
+            semantic_vector::semantic_vector_search_audio,
             visual_analysis::visual_analysis_start,
             visual_analysis::visual_analysis_status,
             visual_analysis::visual_analysis_cancel,

@@ -7,7 +7,7 @@ export const waveformKey=(asset:WaveformAsset)=>JSON.stringify([asset.id,asset.s
 const abortError=()=>new Error('波形请求已取消');
 
 /** One decoder at a time, shared across detail player and visible list rows. */
-export function createWaveformScheduler(fetchWave:FetchWave,maxQueue=24,maxCache=64){
+export function createWaveformScheduler(fetchWave:FetchWave,maxQueue=64,maxCache=64){
  const cache=new Map<string,WaveformData>(),jobs=new Map<string,Job>();
  let queue:Job[]=[],active:Job|null=null;
  function settle(job:Job,wave:WaveformData|null,error?:unknown){
@@ -54,7 +54,40 @@ const shared=createWaveformScheduler(async id=>{
  const {invoke}=await import('@tauri-apps/api/core');
  return invoke<WaveformData>('player_waveform',{id});
 });
-export const getWaveform=shared.get;
+export type WaveformGetter=(asset:WaveformAsset,priority?:number,signal?:AbortSignal)=>Promise<WaveformData>;
+const RETRY_DELAYS=[120,240,400,600];
+const TRANSIENT=[/繁忙/,/让位/,/稍后重试/,/分析锁不可用/];
+/** 只有队列竞争类瞬时错误才重试；解码失败、文件损坏等永久错误必须立即上抛。 */
+export function isTransientWaveformError(error:unknown){
+ const message=String(error instanceof Error?error.message:error??'');
+ return TRANSIENT.some(pattern=>pattern.test(message));
+}
+function delay(ms:number,signal?:AbortSignal){
+ return new Promise<void>((resolve,reject)=>{
+  if(signal?.aborted){reject(new Error('波形请求已取消'));return;}
+  const timer=setTimeout(()=>{signal?.removeEventListener('abort',abort);resolve();},ms);
+  function abort(){clearTimeout(timer);reject(new Error('波形请求已取消'));}
+  signal?.addEventListener('abort',abort,{once:true});
+ });
+}
+/** 队列满或高优先级让位不再直接落到界面成"波形暂不可用"，先有限次退避重试。 */
+export function withWaveformRetry(base:WaveformGetter,delays:number[]=RETRY_DELAYS):WaveformGetter{
+ return async(asset,priority=0,signal)=>{
+  let last:unknown=new Error('波形暂不可用');
+  for(let attempt=0;attempt<=delays.length;attempt++){
+   if(signal?.aborted)throw new Error('波形请求已取消');
+   try{return await base(asset,priority,signal);}
+   catch(error){
+    if(signal?.aborted)throw new Error('波形请求已取消');
+    if(!isTransientWaveformError(error))throw error;
+    last=error;
+    if(attempt<delays.length)await delay(delays[attempt],signal);
+   }
+  }
+  throw last;
+ };
+}
+export const getWaveform=withWaveformRetry(shared.get);
 
 export function fractionAt(clientX:number,left:number,width:number){return width>0?Math.max(0,Math.min(1,(clientX-left)/width)):0;}
 export function waveformPosition(fraction:number,duration:number){return Number.isFinite(duration)&&duration>0?Math.max(0,Math.min(1,fraction))*duration:0;}

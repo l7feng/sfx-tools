@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createWaveformScheduler,waveformKey,envelopePath,fractionAt,waveformPosition} from '../src/waveform-data.ts';
+import {createWaveformScheduler,waveformKey,envelopePath,fractionAt,waveformPosition,withWaveformRetry,isTransientWaveformError} from '../src/waveform-data.ts';
 const asset=(id,modified='1')=>({id,size:100,modified});
 const wave={peaks:[0,.5,1,0],duration:4,analyzed_duration:4,truncated:false};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
@@ -49,4 +49,34 @@ test('continuous envelope uses real amplitudes with no synthetic floor; pointer 
  assert.equal(envelopePath([]),'');assert.equal(envelopePath([0,0]).includes('50.000'),true);
  assert.equal(fractionAt(50,100,200),0);assert.equal(fractionAt(200,100,200),.5);assert.equal(fractionAt(400,100,200),1);
  assert.equal(fractionAt(1,0,0),0);assert.equal(waveformPosition(.25,60),15);assert.equal(waveformPosition(2,60),60);
+});
+test('transient waveform contention is retried with backoff instead of showing unavailable',async()=>{
+ let calls=0;
+ const base=async()=>{calls++;if(calls<3)throw new Error('波形队列繁忙，请稍后重试');return wave;};
+ const get=withWaveformRetry(base,[0,0,0]);
+ assert.equal(await get(asset('a')),wave);assert.equal(calls,3);
+});
+test('permanent decode failure is never retried; exhaustion preserves the last transient error',async()=>{
+ let permanent=0;
+ await assert.rejects(withWaveformRetry(async()=>{permanent++;throw new Error('decode failed');},[0,0])(asset('a')),/decode failed/);
+ assert.equal(permanent,1,'永久错误必须立即上抛');
+ let busy=0;
+ await assert.rejects(withWaveformRetry(async()=>{busy++;throw new Error('波形分析进行中，请稍后重试');},[0,0])(asset('b')),/稍后重试/);
+ assert.equal(busy,3,'2 次退避共 3 次尝试');
+});
+test('waveform retry honors abort before and during backoff',async()=>{
+ let calls=0;const get=withWaveformRetry(async()=>{calls++;return wave;},[50]);
+ const already=new AbortController();already.abort();
+ await assert.rejects(get(asset('a'),0,already.signal),/取消/);assert.equal(calls,0,'已取消的请求不得发起');
+ const controller=new AbortController();
+ const pending=withWaveformRetry(async()=>{throw new Error('波形请求已让位于当前选中素材，请重试');},[50])(asset('b'),0,controller.signal);
+ const rejected=assert.rejects(pending,/取消/);await tick();controller.abort();await rejected;
+});
+test('only contention messages are classified as transient',()=>{
+ assert.equal(isTransientWaveformError(new Error('波形队列繁忙，请稍后重试')),true);
+ assert.equal(isTransientWaveformError(new Error('波形请求已让位于当前选中素材，请重试')),true);
+ assert.equal(isTransientWaveformError(new Error('波形分析锁不可用')),true);
+ assert.equal(isTransientWaveformError(new Error('decode failed')),false);
+ assert.equal(isTransientWaveformError('波形队列繁忙'),true);
+ assert.equal(isTransientWaveformError(null),false);
 });

@@ -1,6 +1,6 @@
 # 音效管理工作台（Sound Workbench）
 
-当前同步 0.1.8 开发源码，仅用于私有开发。可运行版本入口：`D:/Ai-Files/Tools/Exe/07-音效管理软件/sound-workbench-v0.1.8/Sound Workbench.exe`。源码构建及验证入口见下文。首次 Git 提交从本次源码快照开始，不包含本机素材库、账号数据及构建缓存。
+当前同步 0.1.11 开发源码，仅用于私有开发。可运行版本入口：`D:/Ai-Files/Repos/GitHub/sound-workbench/src-tauri/target/debug/sound-workbench.exe`（debug/no-bundle，非安装包）。源码构建及验证入口见下文。首次 Git 提交从本次源码快照开始，不包含本机素材库、账号数据及构建缓存。
 
 音效管理软件独立重写，开发代号。当前推进二三期功能及0.1.5底部工具/完整波形，实际验证与当前状态以知识库Documentation为准；下文旧阶段内容保留为历史记录。
 
@@ -114,3 +114,29 @@
 底部六工具在当前播放器上方非模态展开，叠层同页，不再跳工具页；仍先生成派生结果再显式试听/导出。目录右键“设为常用并置顶”，树顶部显示常用入口。音乐库展开“音乐分类标签”，按流派/情绪/用途/乐器添加或筛选，支持自定义，原标签保留。
 
 音频工具页只保留第三期制作转换、插件/AAF-OMF状态和PT预览；其余通过顶栏“检索 / 管理”“账号”和设置进入库内面板。邮箱登录/注册已分离，真实邮件验证尚未配置。49项前端与debug构建通过，GUI/听审未实测；桌面快捷方式指向0.1.9，工具出口0.1.8包未重打。
+
+## 0.1.10 模型下载队列与音频-文本契约适配
+
+按21号计划下一批顺序推进二期本地AI线，不把人类操作/真实万条/十万条/PT实测作为编码前置。
+
+- 新增可恢复模型下载：Range 4MiB分块、`.part`断点续传、SHA256/长度校验、原子落盘、单任务互斥、取消、主机白名单与相对路径安全；预置 E5/CLAP 固定 revision 清单，并生成 `model-manifest.json`。Tauri命令 model_download_list/start/status/cancel。
+- 新增音频-文本契约适配：Rust模块 `audio_text.rs` 提供 contract_ready 与 status/selftest 命令；Python 桥 `audio_text_bridge.py` 加载固定 revision 的 CLAP ONNX（Xenova/clap-htsat-unfused，revision c28f2883575e590e04d3146ff0713c2448d691ba），做文件契约核验与ONNX张量自检，音频塔输入实测 [1,1,1001,64]，双塔各输出512维向量；encode_text 做文本塔编码。桥严格区分“文件契约/张量自检”与“真实音频语义推理”：未做音频内容语义推理，也不做中文相关性评测。
+- model_registry 原硬编码的 audio_text_ready/download_supported 改为真实能力判定（manifest存在且SHA256通过、音频文本契约就绪、下载模块启用的组合）。
+- 前端 audio-intelligence.tsx 接入下载队列进度/取消与ONNX自检；tools-page.tsx 文案改为“模型下载管理已实现、语义推理未实现”。
+- 修复：text_model_quantized.onnx SHA256 抄写多一位已更正（64位）；已存在但校验失败的损坏文件现仅在下载校验通过后才替换。
+- 验证：model_download 8项、audio_text 2项、model_registry 2项 Rust 测试通过；audio_text_bridge_test.py 8项通过且真实 status/selftest/encode_text 跑通；前端与debug构建通过，未生成安装包。catalog::tests::real_worker_cancel_resume_and_single_task_guard 仍为既有超时问题，与本批无关。
+
+边界：音频内容语义推理、中文相关性评测、联网下载切换、ONNX再分发许可审计、真实GUI/听审、万条/十万条、PT真实工程导入与生产支付均未完成；真实万条发布闸门与S1.4安装升级实测保持。
+
+## 0.1.11 CLAP 语义检索接线与波形修复
+
+接续 0.1.10，落地 24 号复盘“CLAP 接入检索”快赢，并修复列表波形“暂不可用”。
+
+- 新增 `src-tauri/src/semantic_vector.rs`：CLAP 双塔向量索引，独立 SQLite 按固定 revision 隔离；命令 `semantic_vector_build/status/cancel/search_text/search_audio`；批量 `encode_audio_batch` 一次加载 audio ONNX 处理多条，余弦 Top-K，带进度/取消/失败隔离，以音找音排除自身。
+- `audio_text.rs` 暴露 `run_bridge_op` 供复用；`audio_text_bridge.py` 新增 `encode_audio`/`encode_audio_batch`，真实解码 → log-mel → 512 维 L2 归一化向量（FFmpeg 48k 单声道，长音频确定性取开头 10 秒）。
+- 前端 `audio-intelligence.tsx` 新增“CLAP 语义检索”面板：构建/取消索引、中文文本检索、以音找音；文案改为“已接入本地离线检索，中文相关性评测未执行”。
+- 波形修复：`player.rs` 的 AtomicBool 单槽互斥改 `Mutex<()>` 在 `spawn_blocking` 内排队；`waveform-data.ts` 队列 24→64，新增 `withWaveformRetry` 仅对瞬时竞争错误退避，永久错误立即上抛。消除“波形暂不可用·点击重试”。
+- 验证：Rust 135 通过 / 1 既有超时失败 / 5 忽略（`catalog::tests::real_worker_cancel_resume_and_single_task_guard`，与本次无关），`semantic_vector` 6 项、`audio_text` 2 项、波形锁测试通过；Python 21 项、前端 9 项通过；debug 构建通过，未生成安装包。
+- 版本升至 0.1.11；EXE ProductVersion 0.1.11，24618496 字节，写入时间 2026/11/05 12:56:18。
+
+边界：CLAP 中文相关性评测未执行，不宣称检索质量达标；向量索引真实万条稳定性未实测；ONNX 再分发许可未审；长音频未与官方逐帧对照。真实 GUI/听审、PT 实测、生产支付、十万条专项仍保持未完成。

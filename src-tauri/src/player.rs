@@ -35,7 +35,7 @@ pub struct PlayerState { inner:Arc<Inner> }
 struct Inner {
     sender:Mutex<Option<SyncSender<Request>>>,
     snapshot:Arc<Mutex<PlayerSnapshot>>,
-    wave_busy:Arc<AtomicBool>,
+    wave_lock:Arc<Mutex<()>>,
 }
 enum Command { Load { id:String, path:PathBuf, position:f64 }, Control { action:String, value:Option<f64> } }
 struct Request {
@@ -46,7 +46,7 @@ impl PlayerState {
     pub fn new() -> Self {
         Self { inner:Arc::new(Inner {
             sender:Mutex::new(None), snapshot:Arc::new(Mutex::new(PlayerSnapshot::default())),
-            wave_busy:Arc::new(AtomicBool::new(false)),
+            wave_lock:Arc::new(Mutex::new(())),
         }) }
     }
     pub(crate) fn play_derived(&self,id:String,path:PathBuf)->Result<PlayerSnapshot,String>{self.request(Command::Load{id,path,position:0.0})}
@@ -471,8 +471,7 @@ fn cached_waveform(path:&Path,cache:Option<&Path>)->Result<Waveform,String>{
     }
     Ok(wave)
 }
-struct WaveGuard(Arc<AtomicBool>);
-impl Drop for WaveGuard{fn drop(&mut self){self.0.store(false,Ordering::Release);}}
+// 波形解码的串行化由 Inner.wave_lock 在 spawn_blocking 内排队完成，见 player_waveform。
 fn analyze_waveform(path:&Path)->Result<Waveform,String>{
     // 与试听/混音共用gapless解码时间轴，避免MP3峰值包含编码延迟和填充。
     let mut source=PlaybackSource::open(path)?;
@@ -506,12 +505,13 @@ fn analyze_source(source:impl Source<Item=f32>,duration:Option<f64>)->Result<Wav
 }
 #[tauri::command]
 pub async fn player_waveform(id:String,catalog:tauri::State<'_,CatalogState>,player:tauri::State<'_,PlayerState>,app:tauri::AppHandle)->Result<Waveform,String>{
-    player.inner.wave_busy.compare_exchange(false,true,Ordering::AcqRel,Ordering::Acquire)
-        .map_err(|_|"波形分析进行中，请稍后重试。".to_string())?;
-    let guard=WaveGuard(player.inner.wave_busy.clone());let catalog=catalog.inner().clone();
+    // 波形解码互斥由「单槽立即失败」改为「排队等待」：列表滚动时多个请求不再互相撞成
+    // "波形分析进行中"，锁在 spawn_blocking 线程内持有，不占 async runtime 工作线程。
+    let lock=player.inner.wave_lock.clone();let catalog=catalog.inner().clone();
     let cache=app.path().app_cache_dir().ok().map(|p|p.join("waveforms-v1"));
     tauri::async_runtime::spawn_blocking(move||{
-        let _guard=guard;let path=catalog.resolve_asset(&id)?;cached_waveform(&path,cache.as_deref())
+        let _guard=lock.lock().map_err(|_|"波形分析锁不可用".to_string())?;
+        let path=catalog.resolve_asset(&id)?;cached_waveform(&path,cache.as_deref())
     }).await.map_err(|e|e.to_string())?
 }
 
@@ -673,7 +673,7 @@ mod tests{
         assert_eq!(fs::read(&path).unwrap(),before);
     }
     #[test]
-    fn waveform_busy_guard_releases_on_error(){let busy=Arc::new(AtomicBool::new(true));{let _guard=WaveGuard(busy.clone());assert!(analyze_waveform(Path::new("missing-waveform-input.wav")).is_err());}assert!(!busy.load(Ordering::Acquire));}
+    fn waveform_lock_releases_after_decode_error(){let lock=Arc::new(Mutex::new(()));{let _guard=lock.lock().unwrap();assert!(analyze_waveform(Path::new("missing-waveform-input.wav")).is_err());}assert!(lock.try_lock().is_ok());}
     #[test]
     fn waveform_stops_at_sixty_seconds_without_output(){
         let wave=analyze_source(rodio::source::SineWave::new(440.0),None).unwrap();
