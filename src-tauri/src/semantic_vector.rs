@@ -383,7 +383,7 @@ fn begin_query(state: &SemanticVectorState) -> Result<QueryGuard, String> {
         .map_err(|_| "已有语义查询进行中，请稍后重试。".to_string())?;
     Ok(QueryGuard(state.querying.clone()))
 }
-fn search_text(state: &SemanticVectorState, catalog: &CatalogState, audio_text: &AudioTextState, text: &str, scope: &str, limit: usize) -> Result<SearchResult, String> {
+pub(crate) fn search_text(state: &SemanticVectorState, catalog: &CatalogState, audio_text: &AudioTextState, text: &str, scope: &str, limit: usize) -> Result<SearchResult, String> {
     let _query = begin_query(state)?;
     library(scope)?;
     let trimmed = text.trim();

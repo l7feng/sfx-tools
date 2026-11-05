@@ -1,0 +1,19 @@
+{
+  "library": "sound",
+  "limit": 20,
+  "note": "填写说明：expected 填期望素材的文件名或路径片段（大小写不敏感，斜杠统一按 / 匹配），可填多个作为任一命中。留空数组表示尚未标注，该条不进入指标分母。先在应用里建好 CLAP 语义索引再运行。",
+  "queries": [
+    { "query": "铁门被重重关上", "expected": [], "note": "示例：[\"Iron_Gate_Slam_01.wav\"]" },
+    { "query": "雨声打在铁皮屋顶", "expected": [], "note": "" },
+    { "query": "人群嘈杂的室内环境", "expected": [], "note": "" },
+    { "query": "汽车从远处驶过的轮胎声", "expected": [], "note": "" },
+    { "query": "低频轰鸣的氛围铺底", "expected": [], "note": "" },
+    { "query": "玻璃碎裂散落地面", "expected": [], "note": "" },
+    { "query": "老式电话铃响", "expected": [], "note": "" },
+    { "query": "拳头打在肉体上", "expected": [], "note": "" },
+    { "query": "山洞里的滴水回声", "expected": [], "note": "" },
+    { "query": "纸张被翻动", "expected": [], "note": "" },
+    { "query": "远处雷声滚过", "expected": [], "note": "" },
+    { "query": "金属摩擦的尖啸", "expected": [], "note": "" }
+  ]
+}

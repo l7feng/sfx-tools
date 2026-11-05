@@ -16,9 +16,11 @@ mod model_registry;
 mod model_download;
 mod audio_text;
 mod semantic_vector;
+mod semantic_eval;
 mod visual_analysis;
 mod licensing;
 mod workbench_jobs;
+mod bwf_metadata;
 use tauri::Manager;
 
 #[tauri::command]
@@ -125,6 +127,8 @@ fn main() {
             semantic_vector::semantic_vector_cancel,
             semantic_vector::semantic_vector_search_text,
             semantic_vector::semantic_vector_search_audio,
+            semantic_eval::semantic_vector_eval,
+            semantic_eval::semantic_vector_eval_template,
             visual_analysis::visual_analysis_start,
             visual_analysis::visual_analysis_status,
             visual_analysis::visual_analysis_cancel,
@@ -137,6 +141,8 @@ fn main() {
             workbench_jobs::workbench_job_status,
             workbench_jobs::workbench_job_cancel,
             workbench_jobs::production_capabilities,
+            bwf_metadata::bwf_read_metadata,
+            bwf_metadata::bwf_write_metadata,
             player::player_load,
             player::player_preview_at,
             player::player_control,
