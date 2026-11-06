@@ -15,7 +15,7 @@ coverage: "FULL"
 
 ### 停止位置 / Stopped at
 
-0.1.20 交付于 2026-11-06。基线提交 `90d60bd`（0.1.19）；本批改动已落盘（收尾阶段提交工程仓，知识库仓不自动提交）并构建出 debug EXE `sfx-tools.exe` = 25,324,544 字节、ProductVersion/FileVersion 0.1.20、mtime 2026/11/06 13:01。README / HANDOVER / 知识库项目 54 `Documentation.md` / `Plan.md` 均已同步 0.1.20 章节。
+0.1.20 交付于 2026-11-06。基线提交 `90d60bd`（0.1.19）；本批主提交 `b00d1af` 已推送 `origin/main`（知识库仓按约定不自动提交），并构建出 debug EXE `sfx-tools.exe` = 25,324,544 字节、ProductVersion/FileVersion 0.1.20、mtime 2026/11/06 13:01。README / HANDOVER / 知识库项目 54 `Documentation.md` / `Plan.md` 均已同步 0.1.20 章节。
 
 验证：`cargo check --all-targets --offline` 通过；`cargo test --bin sfx-tools --offline` 172 通过 / 1 失败 / 6 忽略（唯一失败为既有时间敏感测试，见下）；`player::tests` 22/22；`tsc --noEmit` 通过；`node --test tests/waveform-data.test.mjs` 10/10；`verify.ps1 -Action build` 通过。CDP 暗／亮两色 12 张截图在 `D:/My-Temporary/sw-debug/v20-*.png`。
 
@@ -106,6 +106,6 @@ coverage: "FULL"
 
 ### 需要重新验证 / Revalidate
 
-- 0.1.20 是否已落到远端 `main`：本交接不缓存 git 状态，接手时跑 `git status --short` 与 `git log origin/main --oneline -3` 自行核验；基线为 `90d60bd`（0.1.19）。
+- 是否有 0.1.20 之后的后续提交：本批收尾时 `origin/main` = `b00d1af`；接手时跑 `git status --short` 与 `git log origin/main --oneline -3` 确认有无新批次。
 - 知识库仓未提交态（并行会话中间态）。
 - 备份目录 `C:\Users\Administrator\AppData\Local\local.soundworkbench.desktop\backup\` 已有一次验收产物 `backup-20261106-130448-25919e3f`，属正常产品数据，勿当垃圾删除。

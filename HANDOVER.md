@@ -194,7 +194,7 @@ git -C 'D:/Ai-Files/Repos/GitHub/sound-workbench' log --oneline -5
 git -C 'D:/Ai-Files/Repos/GitHub/sound-workbench' log origin/main --oneline -3
 ```
 
-- 0.1.20 基线提交是 `90d60bd`（0.1.19 列表列重构与音乐库筛选维度条），0.1.19 及更早批次已提交并推送 `origin/main`。
+- 0.1.20 基线提交是 `90d60bd`（0.1.19 列表列重构与音乐库筛选维度条）；**0.1.20 主提交 `b00d1af` 已推送 `origin/main`**（24 个文件、1837 insertions / 382 deletions），其后另有一笔文档状态补充提交。0.1.19 及更早批次早已推送。
 - 0.1.20 涉及 21 个已跟踪文件与 5 个新文件（`src-tauri/src/multilingual.rs`、`src-tauri/src/settings_ops.rs`、`src/settings-client.ts`、`src/settings-panels.tsx`、`handoff.md`）。
 - `src-tauri/icons/icon.ico` / `icon.png` 有来源未确认的候选图标改动：按 0.1.16 起约定**继续留在工作区、不纳入任何批次提交**，等人类确认其来源与去留。
 - 提交需带身份 `-c user.name=… -c user.email=…`（仓库与全局都未配置），推送走代理 `-c http.proxy=http://127.0.0.1:7897`；**不自动提交知识库仓**（存在并行会话未提交中间态）。
