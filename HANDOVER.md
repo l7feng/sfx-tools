@@ -1,6 +1,6 @@
 # SFX Tools 交接文档（供新 Agent 接手）
 
-> 生成：2026-11-05。当前版本 **0.1.13**（SFX Tools；Cargo/npm 包名 `sfx-tools`；debug/no-bundle，已构建并提交）。
+> 生成：2026-11-05，最后更新 2026-11-06。当前版本 **0.1.16**（SFX Tools；Cargo/npm 包名 `sfx-tools`；debug/no-bundle，已构建并提交推送）。
 > 本文件自包含，新 agent 无需依赖历史对话或 WorkBuddy Skill 机制即可接手。
 
 ## 1. 项目定位与关键路径
@@ -15,7 +15,7 @@
 | 元数据适配 | 知识库 `26-BWF与iXML元数据适配.md` |
 | 评测方法 | 知识库 `27-中文相关性评测方法.md`；模板 `tests/cn-relevance-eval.template.json` |
 | 活待办看板 | `D:/1-个人知识库_Vault/6-资产-R/01-待办事项/待办清单.md` |
-| 交付 EXE | `src-tauri/target/debug/sfx-tools.exe`（0.1.13，24943616 字节，2026/11/05 15:51:18） |
+| 交付 EXE | `src-tauri/target/debug/sfx-tools.exe`（0.1.16，24963072 字节，2026/11/05 18:18）；桌面 `SFX Tools.lnk` 直接指向它，重建即生效 |
 | 交接 Skill（可选） | `C:/Users/Administrator/.workbuddy-ai/skills/sound-workbench-handover/`（SKILL.md + references/handover-state.md）；zip 同目录 |
 
 技术栈：Tauri 2 + React/TypeScript + Rust + SQLite/FTS5 + Python ONNX Runtime 桥（独立 CPU 推理）。
@@ -69,7 +69,16 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 - 上游 `laion/clap-htsat-unfused` 为 Apache-2.0；`Xenova` 仓库**无 LICENSE、无 license 字段**，再分发需我们自行补齐声明（见 25 号审计「路线甲」）。
 - 长音频确定性取开头 480000 samples（10s），未与官方 `ClapFeatureExtractor` 逐帧对照。
 
-## 5. 0.1.13 已交付（本批）
+## 5. 0.1.16 已交付（本批）
+
+- 字号可读性：按人类「字号有点小，看着累」的反馈，全库 246 处字号整体上移一档（`8→10 9→10 10→11 11→12 12→13 13→14`），最小字号从 8px 提到 10px、正文基线 13→14px。只在 `font-size` 与 `font:` 简写的字号上动手，高度/边距/行高未批量改。
+- 阅读面二次对齐（`workspace-shell.css` 末尾「可读性基线」块）：表头 12px/30px、表体 12px/53px、`.asset-name strong` 13px、`.asset-name small` 11px、状态栏 11px/28px、导航项 35px，行高同步放大。列表每屏少约 1 行。
+- 字体栈：`--mono` 补中文回退并前置 Cascadia Mono（`'Cascadia Mono',Consolas,'Microsoft YaHei UI',monospace`），修掉路径列中文掉宋体的问题；`--body` 挂 `Segoe UI` 兜底。
+- 0.1.15 一并提交：`capabilities/main.json` 补 `core:app:allow-version` 并改用自有命令 `app_version()`；波形新增 `isMissingSourceError` 区分文件缺失与瞬时错误；`pinned_paths` 增 `color` 列、新增 `library_pin_color` 命令与右键六色板、常用路径移到侧栏底部常驻并默认展开。`.sidebar-pins` 本轮由 `column-reverse` 改回 `column`，标题回到列表上方。
+- 构建口径更正：`npm run tauri -- build` 必须带 `RUSTUP_HOME=D:/Ai-Files/Tools/BuildEnv/sound-workbench-rust/rustup` + `CARGO_HOME=.../cargo` + PATH `.../cargo/bin`，否则报 toolchain 未安装（默认 `RUSTUP_HOME` 是空的 `C:\Users\<用户>\.rustup`）。只改前端时增量构建 15–25 秒。
+- 提交：`1ced5ad`，33 个文件，已推送 `origin/main`。`src-tauri/icons/icon.{ico,png}` 的候选图标仍在试验，未纳入提交。
+
+### 0.1.13 更名与版本信息
 
 - 更名 SFX Tools：`productName`、Cargo 包名与 npm 包名改为 `sfx-tools`，产物由 `sound-workbench.exe` 变为 `sfx-tools.exe`；窗口标题、侧栏品牌、关于页、`document.title`、`index.html`、单实例窗口匹配串、`verify.ps1` 结束进程路径同步改。桌面快捷方式重建为 `SFX Tools.lnk`（旧 `Sound Workbench.lnk` 已入回收站）。
 - EXE 版本资源补齐（tauri-build 取自 `productName` + `bundle.publisher` + `bundle.copyright`）：`ProductName`/`FileDescription`/`CompanyName` = SFX Tools，`LegalCopyright` = © 2026 SFX Tools，`FileVersion`/`ProductVersion` = 0.1.13。`OriginalFilename` 该字段 tauri-build 不写，属性里为空。
