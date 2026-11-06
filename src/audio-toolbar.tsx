@@ -11,6 +11,19 @@ type ToolJob={job_id:string|null;status:string;progress:number;operation:string;
 const defaults:Options={speed:1,distance:10,effect:'gain',amount:1,cutoff:4000,delayMs:200,wet:.25};
 const labels:Record<Operation,string>={reverse:'反转',mono_merge:'单声道合并',mono_split:'单声道拆分',distance:'距离',effect:'效果器',speed:'变速'};
 const active=(job:ToolJob|null)=>!!job&&['preparing','queued','running','cancelling'].includes(job.status);
+/** 参数条图标：细线风格，配合「图标+文字」的按钮，替代原来的纯文字按钮。 */
+function OpGlyph({op}:{op:Operation|'layer'}){
+ const paths:Record<string,React.ReactNode>={
+  reverse:<><path d="M4 9h14l-3.2-3.2"/><path d="M20 15H6l3.2 3.2"/></>,
+  mono_merge:<><circle cx="8.5" cy="12" r="2.4"/><path d="M12.5 8.6a5 5 0 0 1 0 6.8"/></>,
+  mono_split:<><circle cx="8.5" cy="12" r="2.4"/><path d="M12.5 8.6a5 5 0 0 1 0 6.8"/></>,
+  distance:<><path d="M5 12h.01"/><path d="M9.2 8.8a5 5 0 0 1 0 6.4"/><path d="M13.2 6a9 9 0 0 1 0 12"/></>,
+  effect:<><path d="M4 8h16"/><path d="M4 16h16"/><circle cx="9.5" cy="8" r="2"/><circle cx="15" cy="16" r="2"/></>,
+  speed:<><path d="M4.5 17a8.5 8.5 0 1 1 15 0"/><path d="M12 12.5l4.2-3"/></>,
+  layer:<><rect x="4" y="8" width="11" height="11" rx="2"/><path d="M8 4.5h8.5A3.5 3.5 0 0 1 20 8v8.5"/></>,
+ };
+ return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[op]}</svg>;
+}
 export function AudioToolbar({selected,onOpenLayer}:{selected:CatalogAsset|null;onOpenLayer?:()=>void}){
  const native=isTauri(),[open,setOpen]=useState(false),[target,setTarget]=useState<CatalogAsset|null>(null),[operation,setOperation]=useState<Operation>('reverse'),[options,setOptions]=useState<Options>(defaults),[job,setJob]=useState<ToolJob|null>(null),[known,setKnown]=useState(false),[busy,setBusy]=useState(false),[audition,setAudition]=useState('idle'),[error,setError]=useState(''),[message,setMessage]=useState(''),[index,setIndex]=useState(0),[submitted,setSubmitted]=useState<{id:string;key:string}|null>(null);
  const [layerOpen,setLayerOpen]=useState(false);
@@ -25,7 +38,7 @@ export function AudioToolbar({selected,onOpenLayer}:{selected:CatalogAsset|null;
  const start=()=>void run(async()=>{if(!target)return;const requestKey=key;const id=await invoke<string>('audio_tools_start',{id:target.id,operation,options});const next=await invoke<ToolJob>('audio_tools_status');if(alive.current){setSubmitted({id,key:requestKey});setJob(next);setKnown(true);setIndex(0);setMessage('已生成独立处理任务；不会改写源文件，也不会自动播放。');}});
  const change=(patch:Partial<Options>)=>{setOptions(old=>({...old,...patch}));setMessage('');};
  const states:Record<string,string>={idle:'尚未处理',preparing:'正在准备',queued:'等待中',running:'正在处理',cancelling:'正在取消',cancelled:'已取消',completed:'处理完成',failed:'处理失败'};
- return <div className="audio-toolbar-shell"><nav className="audio-toolbar" aria-label="底部音频工具">{([{label:'反转',value:'reverse'},{label:'单声道',value:'mono_merge'},{label:'距离',value:'distance'},{label:'效果器',value:'effect'}] as {label:string;value:Operation}[]).map(item=><button key={item.value} disabled={!native||!selected||selected.status!=='ready'} onClick={()=>begin(item.value)}>{item.label}</button>)}<button aria-expanded={layerOpen} onClick={()=>{setOpen(false);setLayerOpen(v=>!v);}}>叠层</button><button disabled={!native||!selected||selected.status!=='ready'} onClick={()=>begin('speed')}>变速</button></nav>
+ return <div className="audio-toolbar-shell"><nav className="audio-toolbar" aria-label="底部音频工具">{([{label:'反转',value:'reverse'},{label:'单声道',value:'mono_merge'},{label:'距离',value:'distance'},{label:'效果器',value:'effect'}] as {label:string;value:Operation}[]).map(item=><button key={item.value} disabled={!native||!selected||selected.status!=='ready'} onClick={()=>begin(item.value)}><OpGlyph op={item.value}/><span>{item.label}</span></button>)}<button aria-expanded={layerOpen} onClick={()=>{setOpen(false);setLayerOpen(v=>!v);}}><OpGlyph op="layer"/><span>叠层</span></button><button disabled={!native||!selected||selected.status!=='ready'} onClick={()=>begin('speed')}><OpGlyph op="speed"/><span>变速</span></button></nav>
  {layerOpen&&<section className="audio-tool-dialog audio-inline-panel" aria-label="叠层编排"><header><h2>叠层</h2><button onClick={()=>setLayerOpen(false)} aria-label="收起叠层">×</button></header><LayerTools/></section>}
  <section hidden={!open} className="audio-tool-dialog audio-inline-panel" aria-labelledby="audio-tool-title"><header><div><h2 id="audio-tool-title">{labels[operation]}</h2><p title={target?.path}>{target?.name??'选择素材'}</p></div><button aria-label="关闭音频工具" disabled={busy} onClick={close}>×</button></header>
  <div className="audio-tool-options">

@@ -7,17 +7,18 @@ import {AccountPanel} from './account-panel';
 import {SmartTools} from './smart-tools';
 import {LayerTools} from './layer-tools';
 import {timeLabel} from './demo-data';
+import {ToolGlyph,UiGlyph} from './tool-glyphs';
 import './tools-page.css';
 
 export function ToolsPage({native,ids,selected,library,query,active,onNavigate,onClearQuery,onBack,onPick,onChanged,onCheck,onJobs,busy,area='library'}:{area?:'production'|'library';native:boolean;ids:string[];selected:CatalogAsset|null;library:'sound'|'music';query:string;active:ToolPage|null;onNavigate:(page:ToolPage|null)=>void;onClearQuery:()=>void;onBack:()=>void;onPick:(asset:CatalogAsset)=>void;onChanged:()=>void;onCheck:()=>void;onJobs:()=>void;busy:boolean}){
- const matches=findTools(query).filter(tool=>toolArea(tool.id)===area),page=toolPages.find(tool=>tool.id===active);
+ const matches=findTools(query),page=toolPages.find(tool=>tool.id===active);
  const searching=!!query.trim();
  return <div className="audio-tools-page tool-hub">
-  <div className="tool-hub-heading"><div><h1>{area==='production'?'音频工具':'素材管理与检索'}</h1><p>选择一项工具开始 · {library==='sound'?'音效库':'音乐库'}</p></div><button onClick={()=>{onClearQuery();onNavigate(null);}}>工具总览</button></div>
-  <div className="tool-selection"><div><strong>{ids.length?`已选 ${ids.length} 条素材`:'尚未选择素材'}</strong><span>{ids.length===1&&selected?.id===ids[0]?selected.name:ids.length?'使用当前库的所选素材':'批量导出、转换与以声搜声需要先在素材库选中素材。'}</span></div><button onClick={onBack}>{ids.length?'返回素材库 / 更换选择':'去素材库选择'}</button></div>
-  <nav className={`tool-directory ${active&&!searching?'is-compact':''}`} aria-label="音频工具分类">
-   {matches.map(tool=><button key={tool.id} aria-pressed={active===tool.id} onClick={()=>{onClearQuery();onNavigate(tool.id);}}><strong>{tool.label}</strong>{(!active||searching)&&<span>{tool.description}</span>}</button>)}
-  </nav>
+  <div className="tool-hub-heading"><div><h1>{area==='production'?'音频工具':'素材管理与检索'}</h1><p>选择一项工具开始 · {library==='sound'?'音效库':'音乐库'}</p></div><button onClick={()=>{onClearQuery();onNavigate(null);}}><UiGlyph name="grid"/><span>工具总览</span></button></div>
+  <div className="tool-selection"><div><strong>{ids.length?`已选 ${ids.length} 条素材`:'尚未选择素材'}</strong><span>{ids.length===1&&selected?.id===ids[0]?selected.name:ids.length?'使用当前库的所选素材':'批量导出、转换与以声搜声需要先在素材库选中素材。'}</span></div><button onClick={onBack}><UiGlyph name="back"/><span>{ids.length?'返回素材库 / 更换选择':'去素材库选择'}</span></button></div>
+  {(!active||searching)&&<nav className="tool-directory" aria-label="音频工具分类">
+   {matches.map(tool=><button key={tool.id} aria-pressed={active===tool.id} onClick={()=>{onClearQuery();onNavigate(tool.id);}}><span className="tool-glyph-badge"><ToolGlyph id={tool.id}/></span><span className="tool-glyph-body"><strong>{tool.label}</strong><span>{tool.description}</span></span></button>)}
+  </nav>}
   {searching&&<div className="tool-search-feedback" role="status">{matches.length?`找到 ${matches.length} 项工具，点击进入。`:'没有匹配的工具。'}<button onClick={onClearQuery}>清除工具搜索</button></div>}
   {!active&&<section className="tool-overview"><h2>功能与入口</h2><p>分类按钮始终可达，不再把所有工具堆在长页面中。选择素材后进入相应工具；检查重复、模型登记和账号不要求选择素材。</p><p>模型下载队列（固定版本、断点续传、SHA256校验、取消）与CLAP双塔ONNX张量自检已接入“声学内容检索”页；音频内容语义推理、中文相关性评测、AAF/OMF解析和外部插件宿主尚未实现；账号与订单当前仅为本地开发流程。界面中的状态会说明所需条件。</p></section>}
   <div hidden={!active}>

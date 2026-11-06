@@ -2,6 +2,7 @@ import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {assets,filterAssets,timeLabel} from './demo-data';
 import type {Asset} from './demo-data';
+import './theme.css';
 import './workbench.css';
 
 function Icon({name,size=18}:{name:string;size?:number}) {

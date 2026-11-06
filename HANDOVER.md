@@ -1,6 +1,6 @@
 # SFX Tools 交接文档（供新 Agent 接手）
 
-> 生成：2026-11-05，最后更新 2026-11-06。当前版本 **0.1.16**（SFX Tools；Cargo/npm 包名 `sfx-tools`；debug/no-bundle，已构建并提交推送）。
+> 生成：2026-11-05，最后更新 2026-11-06。当前版本 **0.1.17**（SFX Tools；Cargo/npm 包名 `sfx-tools`；debug/no-bundle，已构建并提交推送）。
 > 本文件自包含，新 agent 无需依赖历史对话或 WorkBuddy Skill 机制即可接手。
 
 ## 1. 项目定位与关键路径
@@ -15,7 +15,7 @@
 | 元数据适配 | 知识库 `26-BWF与iXML元数据适配.md` |
 | 评测方法 | 知识库 `27-中文相关性评测方法.md`；模板 `tests/cn-relevance-eval.template.json` |
 | 活待办看板 | `D:/1-个人知识库_Vault/6-资产-R/01-待办事项/待办清单.md` |
-| 交付 EXE | `src-tauri/target/debug/sfx-tools.exe`（0.1.16，24963072 字节，2026/11/05 18:18）；桌面 `SFX Tools.lnk` 直接指向它，重建即生效 |
+| 交付 EXE | `src-tauri/target/debug/sfx-tools.exe`（0.1.17，24966656 字节，2026/11/06 09:47）；桌面 `SFX Tools.lnk` 直接指向它，重建即生效 |
 | 交接 Skill（可选） | `C:/Users/Administrator/.workbuddy-ai/skills/sound-workbench-handover/`（SKILL.md + references/handover-state.md）；zip 同目录 |
 
 技术栈：Tauri 2 + React/TypeScript + Rust + SQLite/FTS5 + Python ONNX Runtime 桥（独立 CPU 推理）。
@@ -69,7 +69,20 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 - 上游 `laion/clap-htsat-unfused` 为 Apache-2.0；`Xenova` 仓库**无 LICENSE、无 license 字段**，再分发需我们自行补齐声明（见 25 号审计「路线甲」）。
 - 长音频确定性取开头 480000 samples（10s），未与官方 `ClapFeatureExtractor` 逐帧对照。
 
-## 5. 0.1.16 已交付（本批）
+## 5. 0.1.17 已交付（本批）
+
+按人类六条界面反馈落地，全部改动在前端，Rust 侧未动。
+
+- 目录树：`folder-tree.tsx` 用内联 SVG `FolderGlyph` 替换 `▱` 字符，闭合／展开两套造型，选中态跟随 `--accent`；侧栏标题「原路径目录树」→「路径目录」。
+- 播放条：`.player-heading`、`.wave-view-controls` 改右对齐，「待机 尚未播放 波形:…」「波形视图 峰值」两行靠右；删除播放器下方长提示。
+- 二级标签栏：素材库顶栏新增 `.tool-tabs`，横向切换 11 个工具页；`openTool` 在音频工具页内不再跳回素材库；`.tool-directory` 只在总览／搜索时显示。
+- 工具图标：新增 `src/tool-glyphs.tsx`（11 枚工具图标 + `grid`/`back` 两枚动作图标，24×24 线性，`stroke:currentColor`）。
+- 主题系统：新增 `src/theme.css` + `src/theme.ts`，`data-theme`（dark/light）× `data-accent`（gold/blue/teal/violet）= 8 组；强调色阶由 `color-mix` 派生；`localStorage` 键 `sfx-tools-theme-v1`；`index.html` 内联首帧脚本防浅色启动闪暗。`workbench.css` 的 `:root` 只留字体与尺寸，77 处写死色值改为变量。
+- 设置面板：`显示与布局` 顶部新增强调色四色点 + 底色深色/浅色下拉。
+- 验收：`tsc` 与 debug 构建通过；像素审计确认暗紫主题 285 个高饱和像素落在 220–300°、金色仅 6 个（暗金主题金 61／紫 19）；文字对比度浅色 5.39–5.73:1、暗色 7.08–7.53:1，12px 正文过 WCAG AA。
+- 未收编：`spectral-view.css` 12 处频谱画布配色（刻意深底）、素材标签 6 种分类色、`#0006/#0008/#0009` 阴影；波形配色仍是「暖金／青绿」偏好项，未与强调色联动。
+
+### 0.1.16 字号与字体可读性
 
 - 字号可读性：按人类「字号有点小，看着累」的反馈，全库 246 处字号整体上移一档（`8→10 9→10 10→11 11→12 12→13 13→14`），最小字号从 8px 提到 10px、正文基线 13→14px。只在 `font-size` 与 `font:` 简写的字号上动手，高度/边距/行高未批量改。
 - 阅读面二次对齐（`workspace-shell.css` 末尾「可读性基线」块）：表头 12px/30px、表体 12px/53px、`.asset-name strong` 13px、`.asset-name small` 11px、状态栏 11px/28px、导航项 35px，行高同步放大。列表每屏少约 1 行。

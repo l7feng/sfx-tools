@@ -1,6 +1,6 @@
 # SFX Tools（音效与音乐素材工作台）
 
-当前同步 0.1.16 开发源码，仅用于私有开发。可运行版本入口：`D:/Ai-Files/Repos/GitHub/sound-workbench/src-tauri/target/debug/sfx-tools.exe`（debug/no-bundle，非安装包）。源码构建及验证入口见下文。首次 Git 提交从本次源码快照开始，不包含本机素材库、账号数据及构建缓存。
+当前同步 0.1.17 开发源码，仅用于私有开发。可运行版本入口：`D:/Ai-Files/Repos/GitHub/sound-workbench/src-tauri/target/debug/sfx-tools.exe`（debug/no-bundle，非安装包）。源码构建及验证入口见下文。首次 Git 提交从本次源码快照开始，不包含本机素材库、账号数据及构建缓存。
 
 音效管理软件独立重写，开发代号。当前推进二三期功能及0.1.5底部工具/完整波形，实际验证与当前状态以知识库Documentation为准；下文旧阶段内容保留为历史记录。
 
@@ -177,3 +177,18 @@
 - 验证：`tsc` 与 `npm run tauri -- build --debug --no-bundle` 通过；EXE `FileVersion`/`ProductVersion` = 0.1.16，24963072 字节，写入时间 2026/11/05 18:18；五屏（音效库/音乐库/音频工具/目录右键/色板菜单）经 WebView2 调试端口截图核对，无裁切与重叠。
 
 边界：列表行高 49→53px，每屏少显示约 1 行；`src-tauri/icons/*` 的候选图标仍在试验中，未纳入本次提交；E 盘素材路径未恢复，波形列仍显示「文件缺失」，属数据问题。
+## 0.1.17 界面主题化与工具页图标
+
+按人类六条界面反馈落地：目录图标与标题、播放条两行右对齐、删长提示、工具页入口、主题色彩、按钮参考图优化。
+
+- 目录树：`folder-tree.tsx` 用内联 SVG `FolderGlyph` 替换 `▱` 字符，闭合／展开两套造型（有子项且展开时换成开盖形状，选中态跟随 `--accent`）；侧栏标题「原路径目录树」改为「路径目录」。
+- 播放条右对齐：`.player-heading` 与 `.wave-view-controls` 改 `justify-content:flex-end`，「待机 尚未播放 波形:…」「波形视图 峰值」两行靠右；删除播放器下方长提示，只保留 `Space 播放／暂停`。
+- 二级标签栏：素材库顶栏在库切换右侧新增 `.tool-tabs`，工具页与库内工具抽屉都能横向切换全部 11 个工具页；`openTool` 同步调整——在音频工具页内点库类工具不再跳回素材库；`.tool-directory` 改为只在总览或搜索时出现，打开具体工具后让位给内容区。
+- 工具图标：新增 `src/tool-glyphs.tsx`，11 个工具页各一枚 24×24 线性图标（放大镜内电平条／标签／双矩形／双向箭头／插头／三层堆叠／文本行+放大镜／导入托盘／人像／健康曲线／信息圈），另含 `grid`、`back` 两枚动作图标；标签栏 13px、卡片徽章 15px、动作按钮 14px。首版「放大镜内正弦波」在 13px 下糊成一团，改为三条电平条后小尺寸可辨。
+- 主题系统：新增 `src/theme.css` 与 `src/theme.ts`——`<html data-theme="dark|light" data-accent="gold|blue|teal|violet">` 共 8 组组合（4 主色 × 亮暗）；`:root` 保留暗色令牌，`[data-theme=light]` 整体覆盖亮色；强调色阶用 `color-mix(in srgb,var(--accent) …)` 派生 `--accent-wash`／`--accent-line`／`--accent-line-strong`／`--accent-hover`／`--wave-fill`／`--wave-line`，一处改主色即全站联动。选择存 `localStorage` 键 `sfx-tools-theme-v1`；`index.html` head 内联首帧脚本先写 `dataset`，避免浅色启动时闪一帧暗底。
+- 颜色收编：`workbench.css` 的 `:root` 只留字体与尺寸，颜色全部移交 theme.css；脚本批量把 77 处写死色值映射为变量（含 `#151719ee` → `color-mix(in srgb,var(--bg) 93%,transparent)`、`#818885` → `var(--muted)`）。
+- 设置：`显示与布局` 顶部新增「强调色」四个色点（选中态双层描边）+「底色」深色／浅色下拉，与列表密度、波形配色并列。
+- 验收：`tsc --noEmit` 与 `npm run tauri -- build --debug --no-bundle` 通过；EXE 0.1.17，24966656 字节，2026/11/06 09:47。像素审计——暗紫主题高饱和像素 285 个落在 220–300° 色相、金色仅 6 个，暗金主题反之（金 61／紫 19），证明强调色真正生效；文字对比度浅色 5.39–5.73:1、暗色 7.08–7.53:1，12px 正文均过 WCAG AA。逐屏截图覆盖工具总览、素材库、设置对话框、目录右键在亮暗两种主题下的表现。
+
+边界：`spectral-view.css` 仍留 12 处频谱画布配色（刻意保持深底，避免浅色下频谱对比不足）；素材标签的 6 种分类色与 `#0006/#0008/#0009` 阴影未收编为变量；波形配色仍是既有「暖金／青绿」偏好项，未与强调色联动；`src-tauri/icons/*` 三版候选图标仍待人类选定，未纳入提交；安装包未生成。
+
