@@ -3,8 +3,9 @@ import {invoke} from '@tauri-apps/api/core';
 import {ContextMenu,type MenuItem} from './context-menu';
 import {displayPath,formatBytes,type CatalogAsset} from './catalog-client';
 import {pruneLayer,refreshLayerAssets,getLayerAssetIds} from './layer-tools';
+import {PIN_COLORS,pinColorLabel,type Pin} from './pin-colors';
 export type ContextTarget={x:number;y:number;folder?:string;assets?:CatalogAsset[]};
-export type LibraryOverview={tags:{name:string;count:number}[];playlists:{id:string;name:string;count:number}[];pins:string[];history_count:number};
+export type LibraryOverview={tags:{name:string;count:number}[];playlists:{id:string;name:string;count:number}[];pins:Pin[];history_count:number};
 type Edit={kind:string;target:ContextTarget};
 type SourcePreview={token:string;action:string;path:string;destination:string|null;files:number;bytes:number;catalog_items:number;unindexed_files:number;warning:string};
 type RemovePreview={token:string;directories:number;assets:number;bytes:number;favorites:number;tags:number;notes:number;playlists:number;history:number;paths:string[]};
@@ -29,8 +30,9 @@ export function CatalogContext({target,library,overview,onClose,onChanged,notify
   if(preview){await invoke('player_control',{action:'stop',value:null});const result=await invoke<{message:string;path:string|null}>('source_commit',{token:preview.token});let message=result.message;if(preview.action==='trash')pruneLayer({folder:preview.path});else {const layerIds=getLayerAssetIds();if(layerIds.length)try{for(let offset=0;offset<layerIds.length;offset+=100)refreshLayerAssets(await invoke<CatalogAsset[]>('catalog_get_items',{ids:layerIds.slice(offset,offset+100)}));}catch{message+='；叠层路径刷新失败，请重新打开工具页核对。';}}notify(message);finish(true);}
  });
  const items:MenuItem[]=[];
- if(target?.folder){const t=target,path=t.folder!,pinned=overview.pins.includes(path);items.push(
+ if(target?.folder){const t=target,path=t.folder!,pinnedEntry=overview.pins.find(item=>item.path===path),pinned=!!pinnedEntry;items.push(
   {label:pinned?'取消常用置顶':'设为常用并置顶',icon:'⌖',run:()=>exec(async()=>{await invoke('library_pin',{library,path,pinned:!pinned});onChanged();notify(pinned?'已移除常用路径':'已添加常用路径');})},
+  ...(pinned?[{label:'颜色标记',swatches:[...PIN_COLORS.map(item=>({value:item.value,label:item.label,active:pinnedEntry?.color===item.value,run:()=>exec(async()=>{await invoke('library_pin_color',{library,path,color:item.value});onChanged();notify(`已标记为${item.label}色`);})})),{value:'',label:`清除颜色（当前${pinColorLabel(pinnedEntry?.color)}）`,active:!pinnedEntry?.color,run:()=>exec(async()=>{await invoke('library_pin_color',{library,path,color:null});onChanged();notify('已清除颜色标记');})}]} as MenuItem]:[]),
   {label:'重新扫描此文件夹',icon:'↻',run:()=>exec(async()=>{await invoke('catalog_start',{root:path,library});onChanged();notify('正在重新扫描此文件夹');})},
   {label:'新建子文件夹…',separator:true,run:()=>begin('mkdir',t)},
   {label:'重命名此文件夹…',icon:'✎',run:()=>begin('rename',t)},

@@ -15,6 +15,11 @@ export function Envelope({peaks,progress=0,cursor=null,className=''}:{peaks:numb
 }
 
 const label=(seconds:number)=>`${Math.floor(seconds/60)}:${(seconds%60).toFixed(1).padStart(4,'0')}`;
+/** 源文件本身不在了：重试没有意义，必须明确告诉人"文件缺失"而不是"波形暂不可用"。 */
+export function isMissingSourceError(error:unknown){
+ const message=String(error instanceof Error?error.message:error??'');
+ return /素材不可访问|找不到指定|路径不存在|os error (2|3)\b|not found|文件缺失/i.test(message);
+}
 export function MiniWaveform({asset,onChoose}:{asset:CatalogAsset;onChoose?:(asset:CatalogAsset)=>void}){
  const root=useRef<HTMLDivElement>(null),live=useRef(true),previewBusy=useRef(false),revision=useRef(0);
  const key=waveformKey(asset);
@@ -48,9 +53,9 @@ export function MiniWaveform({asset,onChoose}:{asset:CatalogAsset;onChoose?:(ass
   onPointerDown={e=>{e.preventDefault();e.stopPropagation();e.currentTarget.focus({preventScroll:true});}} onPointerUp={e=>e.stopPropagation()} onDoubleClick={e=>e.stopPropagation()}
   onPointerMove={e=>{e.stopPropagation();const rect=e.currentTarget.getBoundingClientRect();setCursor(fractionAt(e.clientX,rect.left,rect.width));}}
   onPointerLeave={()=>setCursor(null)}
-  onClick={e=>{e.stopPropagation();if(error&&!wave){setRetry(value=>value+1);setVisible(true);return;}const rect=e.currentTarget.getBoundingClientRect();const fraction=e.detail===0?keyboard:fractionAt(e.clientX,rect.left,rect.width);setKeyboard(fraction);void preview(fraction);}}
+  onClick={e=>{e.stopPropagation();if(error&&!wave){if(!isMissingSourceError(error)){setRetry(value=>value+1);setVisible(true);}return;}const rect=e.currentTarget.getBoundingClientRect();const fraction=e.detail===0?keyboard:fractionAt(e.clientX,rect.left,rect.width);setKeyboard(fraction);void preview(fraction);}}
   onFocus={()=>setVisible(true)}
-  onKeyDown={e=>{e.stopPropagation();if(['ArrowLeft','ArrowRight','Home','End','Enter',' '].includes(e.key))e.preventDefault();if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key))setCursor(null);if(e.key==='ArrowLeft')setKeyboard(v=>Math.max(0,v-.02));else if(e.key==='ArrowRight')setKeyboard(v=>Math.min(1,v+.02));else if(e.key==='Home')setKeyboard(0);else if(e.key==='End')setKeyboard(1);else if(e.key==='Enter'&&!e.repeat){if(error&&!wave)setRetry(v=>v+1);else void preview(keyboard);}}}>
-  {wave?<><Envelope peaks={wave.peaks} cursor={cursor??keyboard}/><span className="mini-waveform-time">{label(position)}{wave.truncated?' · 前段':''}</span></>:<span className="mini-waveform-message">{error?'波形暂不可用 · 点击重试':asset.status!=='ready'?'素材不可用':visible?'读取峰值…':'波形'}</span>}
+  onKeyDown={e=>{e.stopPropagation();if(['ArrowLeft','ArrowRight','Home','End','Enter',' '].includes(e.key))e.preventDefault();if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key))setCursor(null);if(e.key==='ArrowLeft')setKeyboard(v=>Math.max(0,v-.02));else if(e.key==='ArrowRight')setKeyboard(v=>Math.min(1,v+.02));else if(e.key==='Home')setKeyboard(0);else if(e.key==='End')setKeyboard(1);else if(e.key==='Enter'&&!e.repeat){if(error&&!wave){if(!isMissingSourceError(error))setRetry(v=>v+1);}else void preview(keyboard);}}}>
+  {wave?<><Envelope peaks={wave.peaks} cursor={cursor??keyboard}/><span className="mini-waveform-time">{label(position)}{wave.truncated?' · 前段':''}</span></>:<span className={`mini-waveform-message${error&&isMissingSourceError(error)?' is-missing':''}`}>{error?(isMissingSourceError(error)?'文件缺失':'波形暂不可用 · 点击重试'):asset.status!=='ready'?'素材不可用':visible?'读取峰值…':'波形'}</span>}
  </div>;
 }

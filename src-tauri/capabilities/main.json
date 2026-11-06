@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-local-events",
-  "description": "接收当前本地工作台的原生文件夹拖放事件",
+  "description": "接收当前本地工作台的原生文件夹拖放事件，并允许读取应用自身版本号",
   "windows": ["main"],
-  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:app:allow-version",
+    "core:app:allow-name",
+    "core:app:allow-tauri-version"
+  ]
 }

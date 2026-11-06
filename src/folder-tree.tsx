@@ -1,7 +1,7 @@
 import React,{useMemo,useState} from 'react';
 import type {FolderNode} from './catalog-client';
 import {displayPath} from './catalog-client';
-export function FolderTree({nodes,selected,onSelect,onContext,pins=[]}:{pins?:string[];nodes:FolderNode[];selected:string|null;onSelect:(path:string)=>void;onContext?:(path:string,event:React.MouseEvent)=>void}){
+export function FolderTree({nodes,selected,onSelect,onContext}:{nodes:FolderNode[];selected:string|null;onSelect:(path:string)=>void;onContext?:(path:string,event:React.MouseEvent)=>void}){
  const [expanded,setExpanded]=useState(new Set<string>()),[collapsed,setCollapsed]=useState(new Set<string>());
  const {children,roots}=useMemo(()=>{
   const known=new Set(nodes.map(n=>n.path));const children=new Map<string,FolderNode[]>();const roots:FolderNode[]=[];
@@ -15,5 +15,5 @@ export function FolderTree({nodes,selected,onSelect,onContext,pins=[]}:{pins?:st
    <button className="folder-select" title={displayPath(node.path)} aria-current={selected===node.path?'location':undefined} onClick={()=>onSelect(node.path)}><span>▱ {node.name}</span><small>{node.count}</small></button>
   </div>{open&&nested.length>0&&<ul>{nested.map(child=>render(child,depth+1))}</ul>}</li>;
  }
- return <nav className="folder-tree" aria-label="原路径文件树">{pins.length>0&&<div className="tree-pins"><strong>常用 · 置顶</strong>{pins.map(path=><div key={path} onContextMenu={event=>{if(onContext){event.preventDefault();onContext(path,event);}}}><button title={displayPath(path)} aria-current={selected===path?'location':undefined} onClick={()=>onSelect(path)}>⌖ {nodes.find(n=>n.path===path)?.name??displayPath(path).split(/[\\/]/).pop()}</button></div>)}</div>}{roots.length?<ul>{roots.map(n=>render(n,0))}</ul>:<p className="tree-empty">导入后按原始目录显示<br/>不会整理或移动文件</p>}</nav>;
+ return <nav className="folder-tree" aria-label="原路径文件树">{roots.length?<ul>{roots.map(n=>render(n,0))}</ul>:<p className="tree-empty">导入后按原始目录显示<br/>不会整理或移动文件</p>}</nav>;
 }

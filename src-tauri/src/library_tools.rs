@@ -16,14 +16,26 @@ pub(super) fn initialize(conn:&Connection)->Result<(),String>{
         library TEXT NOT NULL CHECK(library IN ('sound','music')),path TEXT NOT NULL,created TEXT NOT NULL,
         PRIMARY KEY(library,path));
         CREATE TABLE IF NOT EXISTS catalog_directories (
-        path TEXT NOT NULL,library TEXT NOT NULL CHECK(library IN ('sound','music')),PRIMARY KEY(path,library));").map_err(err)
+        path TEXT NOT NULL,library TEXT NOT NULL CHECK(library IN ('sound','music')),PRIMARY KEY(path,library));").map_err(err)?;
+    ensure_pin_color(conn)
 }
+/// 常用路径的颜色标记是后加字段：旧库用 ALTER 补齐，不重建表、不动既有置顶。
+fn ensure_pin_color(conn:&Connection)->Result<(),String>{
+    let mut stmt=conn.prepare("PRAGMA table_info(pinned_paths)").map_err(err)?;
+    let names=stmt.query_map([],|r|r.get::<_,String>(1)).map_err(err)?.collect::<Result<Vec<_>,_>>().map_err(err)?;
+    drop(stmt);
+    if !names.iter().any(|name|name=="color"){conn.execute("ALTER TABLE pinned_paths ADD COLUMN color TEXT",[]).map_err(err)?;}
+    Ok(())
+}
+const PIN_COLORS:[&str;6]=["red","orange","yellow","green","blue","purple"];
 #[derive(Serialize)]
 pub struct TagCount{pub name:String,pub count:u64}
 #[derive(Serialize)]
 pub struct PlaylistSummary{pub id:String,pub name:String,pub count:u64}
 #[derive(Serialize)]
-pub struct LibraryOverview{pub tags:Vec<TagCount>,pub playlists:Vec<PlaylistSummary>,pub pins:Vec<String>,pub history_count:u64}
+pub struct PinEntry{pub path:String,pub color:Option<String>}
+#[derive(Serialize)]
+pub struct LibraryOverview{pub tags:Vec<TagCount>,pub playlists:Vec<PlaylistSummary>,pub pins:Vec<PinEntry>,pub history_count:u64}
 fn overview(db:&Path,library:&str)->Result<LibraryOverview,String>{
     let library=validate_library(library)?;let mut conn=connection(db)?;let tx=conn.transaction().map_err(err)?;
     let mut counts:BTreeMap<String,u64>=BTreeMap::new();
@@ -37,7 +49,7 @@ fn overview(db:&Path,library:&str)->Result<LibraryOverview,String>{
     let tags=counts.into_iter().map(|(name,count)|TagCount{name,count}).collect();
     let playlists={let mut stmt=tx.prepare("SELECT p.id,p.name,COUNT(l.asset_id) FROM playlists p LEFT JOIN playlist_items i ON i.playlist_id=p.id LEFT JOIN asset_libraries l ON l.asset_id=i.asset_id AND l.library=p.library WHERE p.library=?1 GROUP BY p.id,p.name ORDER BY p.created,p.id").map_err(err)?;
         let rows=stmt.query_map([library],|r|Ok(PlaylistSummary{id:r.get(0)?,name:r.get(1)?,count:r.get(2)?})).map_err(err)?.collect::<Result<Vec<_>,_>>().map_err(err)?;rows};
-    let pins={let mut stmt=tx.prepare("SELECT path FROM pinned_paths WHERE library=?1 ORDER BY created,path").map_err(err)?;let rows=stmt.query_map([library],|r|r.get(0)).map_err(err)?.collect::<Result<Vec<_>,_>>().map_err(err)?;rows};
+    let pins={let mut stmt=tx.prepare("SELECT path,color FROM pinned_paths WHERE library=?1 ORDER BY created,path").map_err(err)?;let rows=stmt.query_map([library],|r|Ok(PinEntry{path:r.get(0)?,color:r.get(1)?})).map_err(err)?.collect::<Result<Vec<_>,_>>().map_err(err)?;rows};
     let history_count=tx.query_row("SELECT COUNT(*) FROM play_history h JOIN asset_libraries l ON h.asset_id=l.asset_id WHERE l.library=?1",[library],|r|r.get(0)).map_err(err)?;
     tx.commit().map_err(err)?;Ok(LibraryOverview{tags,playlists,pins,history_count})
 }
@@ -52,6 +64,21 @@ fn pin(db:&Path,library:&str,path:&str,pinned:bool)->Result<(),String>{
         if !exists&&count>=100{return Err("每个库最多保留100个常用路径。".into());}
         conn.execute("INSERT OR IGNORE INTO pinned_paths(library,path,created) VALUES(?1,?2,?3)",params![library,path,now()]).map_err(err)?;
     }else{conn.execute("DELETE FROM pinned_paths WHERE library=?1 AND path=?2",params![library,path]).map_err(err)?;}
+    Ok(())
+}
+/// 只给已置顶的路径上色；颜色是常用路径的属性，不单独存在。
+fn pin_color(db:&Path,library:&str,path:&str,color:Option<&str>)->Result<(),String>{
+    let library=validate_library(library)?;
+    let color=match color.map(str::trim).filter(|value|!value.is_empty()){
+        None=>None,
+        Some(value)=>{
+            if !PIN_COLORS.contains(&value){return Err("颜色标记不在允许范围内。".into());}
+            Some(value)
+        }
+    };
+    let conn=connection(db)?;
+    let changed=conn.execute("UPDATE pinned_paths SET color=?1 WHERE library=?2 AND path=?3",params![color,library,path]).map_err(err)?;
+    if changed==0{return Err("该路径不在常用路径中，未设置颜色。".into());}
     Ok(())
 }
 fn playlist_create(db:&Path,library:&str,name:&str)->Result<String,String>{
@@ -157,6 +184,8 @@ pub async fn library_overview(library:String,state:tauri::State<'_,CatalogState>
 #[tauri::command]
 pub async fn library_pin(library:String,path:String,pinned:bool,state:tauri::State<'_,CatalogState>)->Result<(),String>{let state=state.inner().clone();tauri::async_runtime::spawn_blocking(move||state.with_idle(|db|pin(db,&library,&path,pinned))).await.map_err(err)?}
 #[tauri::command]
+pub async fn library_pin_color(library:String,path:String,color:Option<String>,state:tauri::State<'_,CatalogState>)->Result<(),String>{let state=state.inner().clone();tauri::async_runtime::spawn_blocking(move||state.with_idle(|db|pin_color(db,&library,&path,color.as_deref()))).await.map_err(err)?}
+#[tauri::command]
 pub async fn library_playlist_create(library:String,name:String,state:tauri::State<'_,CatalogState>)->Result<String,String>{let db=state.database_path();tauri::async_runtime::spawn_blocking(move||playlist_create(&db,&library,&name)).await.map_err(err)?}
 #[tauri::command]
 pub async fn library_playlist_add(playlist_id:String,ids:Vec<String>,state:tauri::State<'_,CatalogState>)->Result<u64,String>{let db=state.database_path();tauri::async_runtime::spawn_blocking(move||playlist_add(&db,&playlist_id,ids)).await.map_err(err)?}
@@ -188,7 +217,24 @@ mod tests{
     #[test]
     fn collections_pins_survive_reopen_and_respect_library(){
         let f=Fixture::new();f.asset("one","a","sound");let folder=path_string(&f.root.join("a")).unwrap();pin(&f.db,"sound",&folder,true).unwrap();pin(&f.db,"sound",&folder,true).unwrap();assert!(pin(&f.db,"music",&folder,true).is_err());
-        assert_eq!(overview(&f.db,"sound").unwrap().pins,vec![folder.clone()]);let conn=connection(&f.db).unwrap();initialize(&conn).unwrap();assert_eq!(overview(&f.db,"sound").unwrap().pins.len(),1);pin(&f.db,"sound",&folder,false).unwrap();assert!(overview(&f.db,"sound").unwrap().pins.is_empty());
+        let first=overview(&f.db,"sound").unwrap().pins;assert_eq!(first.len(),1);assert_eq!(first[0].path,folder);assert!(first[0].color.is_none());
+        let conn=connection(&f.db).unwrap();initialize(&conn).unwrap();assert_eq!(overview(&f.db,"sound").unwrap().pins.len(),1);
+        pin(&f.db,"sound",&folder,false).unwrap();assert!(overview(&f.db,"sound").unwrap().pins.is_empty());
+    }
+    #[test]
+    fn pin_color_is_validated_stored_per_library_and_cleared_with_the_pin(){
+        let f=Fixture::new();f.asset("one","a","sound");f.asset("two","ab","sound");let a=path_string(&f.root.join("a")).unwrap();let ab=path_string(&f.root.join("ab")).unwrap();
+        assert!(pin_color(&f.db,"sound",&a,Some("red")).is_err());
+        pin(&f.db,"sound",&a,true).unwrap();pin(&f.db,"sound",&ab,true).unwrap();
+        assert!(pin_color(&f.db,"sound",&a,Some("neon")).is_err());
+        assert!(pin_color(&f.db,"music",&a,Some("red")).is_err());
+        pin_color(&f.db,"sound",&a,Some("red")).unwrap();pin_color(&f.db,"sound",&ab,Some("blue")).unwrap();
+        let colors=overview(&f.db,"sound").unwrap().pins.into_iter().map(|entry|(entry.path,entry.color)).collect::<Vec<_>>();
+        assert_eq!(colors,vec![(a.clone(),Some("red".to_string())),(ab,Some("blue".to_string()))]);
+        pin_color(&f.db,"sound",&a,Some("  ")).unwrap();
+        assert!(overview(&f.db,"sound").unwrap().pins.iter().find(|entry|entry.path==a).unwrap().color.is_none());
+        let conn=connection(&f.db).unwrap();initialize(&conn).unwrap();
+        assert_eq!(overview(&f.db,"sound").unwrap().pins.iter().filter(|entry|entry.color.is_some()).count(),1);
     }
     #[test]
     fn collections_history_is_bounded_and_replaying_moves_one_item_to_front(){

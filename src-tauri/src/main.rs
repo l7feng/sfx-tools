@@ -28,6 +28,12 @@ fn native_info() -> String {
     format!("Rust 原生调用成功\n系统：{} / {}\n版本：{}", std::env::consts::OS, std::env::consts::ARCH, env!("CARGO_PKG_VERSION"))
 }
 
+// 版本号走自有命令，不依赖 core:app 权限：界面徽标必须永远有值，而不是退化成「v—」。
+#[tauri::command]
+fn app_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
 fn main() {
     let _startup=match desktop::startup_guard(){Ok(Some(lock))=>lock,Ok(None)=>return,Err(e)=>{desktop::message(&e);return;}};
     tauri::Builder::default()
@@ -56,6 +62,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             native_info,
+            app_version,
             audio_probe::test_tone,
             audio_probe::decode_sample,
             audio_probe::play_sample,
@@ -68,6 +75,7 @@ fn main() {
             catalog::catalog_assign_library,
             catalog::library_tools::library_overview,
             catalog::library_tools::library_pin,
+            catalog::library_tools::library_pin_color,
             catalog::library_tools::library_playlist_create,
             catalog::library_tools::library_playlist_add,
             catalog::library_tools::catalog_remove_preview,

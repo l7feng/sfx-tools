@@ -12,9 +12,9 @@
 .catalog-shell .asset-scroll table td{overflow:hidden;text-overflow:ellipsis}
 .catalog-shell .asset-name strong,.catalog-shell .asset-name small{max-width:100%;width:100%;user-select:none}
 .catalog-shell .asset-name{min-width:0}
-.asset-actions{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:0 20px 8px;font-size:11px;color:var(--muted)}
-.asset-actions>span{margin-right:auto}.asset-actions button{font-size:11px;padding:0 8px;border:1px solid var(--line)}
-.relocate-panel{padding:12px 20px;background:var(--raised);font-size:11px;max-height:240px;overflow:auto;border-block:1px solid var(--line)}
+.asset-actions{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:0 20px 8px;font-size:12px;color:var(--muted)}
+.asset-actions>span{margin-right:auto}.asset-actions button{font-size:12px;padding:0 8px;border:1px solid var(--line)}
+.relocate-panel{padding:12px 20px;background:var(--raised);font-size:12px;max-height:240px;overflow:auto;border-block:1px solid var(--line)}
 .relocate-panel label{display:block;margin-top:8px}.relocate-panel input{width:100%;margin-top:6px}.relocate-panel small{display:block;overflow-wrap:anywhere}
 .catalog-shell .filterbar{flex-wrap:wrap}.catalog-shell .rate-col{display:table-cell}
 .catalog-shell .statusbar>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
