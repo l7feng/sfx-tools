@@ -1,5 +1,5 @@
 export type WaveformAsset={id:string;size:number;modified:string};
-export type WaveformData={peaks:number[];duration:number|null;analyzed_duration:number;truncated:boolean};
+export type WaveformData={peaks:number[];duration:number|null;analyzed_duration:number;truncated:boolean;channels?:number;channel_peaks?:number[][]};
 type FetchWave=(id:string)=>Promise<WaveformData>;
 type Waiter={resolve:(wave:WaveformData)=>void;reject:(reason:unknown)=>void;signal?:AbortSignal;abort:()=>void};
 type Job={key:string;id:string;priority:number;waiters:Set<Waiter>};
@@ -91,12 +91,14 @@ export const getWaveform=withWaveformRetry(shared.get);
 
 export function fractionAt(clientX:number,left:number,width:number){return width>0?Math.max(0,Math.min(1,(clientX-left)/width)):0;}
 export function waveformPosition(fraction:number,duration:number){return Number.isFinite(duration)&&duration>0?Math.max(0,Math.min(1,fraction))*duration:0;}
-/** Mirrored peak envelope retains original bins (no random/synthetic waveform). */
-export function envelopePath(peaks:readonly number[]){
+/** Mirrored peak envelope retains original bins (no random/synthetic waveform).
+ *  lanes=1 占满高度；lanes=2 按上下两轨分区，每轨围绕自己的中线镜像，单声道不再冒充立体声。 */
+export function envelopePath(peaks:readonly number[],lanes=1,lane=0){
  if(!peaks.length)return '';
- const amplitude=(value:number)=>Number.isFinite(value)?Math.max(0,Math.min(1,value))*48:0;
+ const height=100/Math.max(1,lanes),center=(lane+.5)*height;
+ const amplitude=(value:number)=>(Number.isFinite(value)?Math.max(0,Math.min(1,value)):0)*(height/2-2);
  const x=(i:number)=>peaks.length===1?0:i/(peaks.length-1)*1000;
- const top=peaks.map((peak,i)=>`${i?'L':'M'}${x(i).toFixed(3)},${(50-amplitude(peak)).toFixed(3)}`).join(' ');
- const bottom=peaks.map((_,i)=>{const j=peaks.length-1-i;return `L${x(j).toFixed(3)},${(50+amplitude(peaks[j])).toFixed(3)}`;}).join(' ');
+ const top=peaks.map((peak,i)=>`${i?'L':'M'}${x(i).toFixed(3)},${(center-amplitude(peak)).toFixed(3)}`).join(' ');
+ const bottom=peaks.map((_,i)=>{const j=peaks.length-1-i;return `L${x(j).toFixed(3)},${(center+amplitude(peaks[j])).toFixed(3)}`;}).join(' ');
  return `${top} ${bottom} Z`;
 }

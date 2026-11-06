@@ -8,7 +8,7 @@ use uuid::Uuid;
 const MAX_POINTS:usize=8192;
 const CACHE_BYTES:u64=8*1024*1024;
 const CACHE_RECORD:u64=256*1024;
-const VERSION:u32=1;
+const VERSION:u32=2;
 fn err(e:impl std::fmt::Display)->String{e.to_string()}
 #[derive(Clone,Debug,Serialize,Deserialize,PartialEq)]
 struct Identity{path:PathBuf,size:u64,modified:String,version:u32}
@@ -73,11 +73,15 @@ impl Buckets{
 }
 fn analyze(source:&mut PlaybackSource,cancel:&AtomicBool,mut progress:impl FnMut(f64,Option<f64>))->Result<Waveform,String>{
  let rate=source.sample_rate();let channels=source.channels();if rate==0||channels==0||channels>64{return Err("音频规格不支持完整波形分析。".into());}
- let expected=source.total_duration().map(|value|value.as_secs_f64());let mut buckets=Buckets::new();let mut last=Instant::now();
+ let expected=source.total_duration().map(|value|value.as_secs_f64());let mut buckets=Buckets::new();
+ // 立体声另记两份包络，供界面上下分轨；单声道不额外分配。
+ let mut lanes:Vec<Buckets>=if channels>1{(0..channels).map(|_|Buckets::new()).collect()}else{Vec::new()};
+ let mut last=Instant::now();
  loop{
   if buckets.frames%2048==0&&cancel.load(Ordering::Acquire){return Err("完整波形分析已取消。".into());}
   let Some(left)=source.next() else{break};if !left.is_finite(){return Err("音频含非有限采样，不能生成完整波形。".into());}let mut peak=left.abs();
-  for _ in 1..channels{let value=source.next().ok_or("声道采样不完整，波形分析失败。")?;if !value.is_finite(){return Err("音频含非有限采样。".into());}peak=peak.max(value.abs());}
+  if !lanes.is_empty(){lanes[0].push(left.abs().min(1.0));}
+  for channel in 1..channels{let value=source.next().ok_or("声道采样不完整，波形分析失败。")?;if !value.is_finite(){return Err("音频含非有限采样。".into());}peak=peak.max(value.abs());if !lanes.is_empty(){lanes[channel as usize].push(value.abs().min(1.0));}}
   buckets.push(peak.min(1.0));
   if last.elapsed()>=Duration::from_millis(100){let seconds=buckets.frames as f64/rate as f64;progress(seconds,expected.filter(|v|*v>0.0).map(|v|(seconds/v).min(0.999)));last=Instant::now();}
  }
@@ -85,7 +89,8 @@ fn analyze(source:&mut PlaybackSource,cancel:&AtomicBool,mut progress:impl FnMut
  if buckets.frames==0{return Err("音频没有有效采样。".into());}
  let seconds=buckets.frames as f64/rate as f64;
  if expected.is_some_and(|value|(value-seconds).abs()>2.0/rate as f64+0.00001){return Err("实际采样长度与文件头时长不一致，请检查文件。".into());}
- Ok(Waveform{peaks:buckets.finish(),duration:Some(seconds),analyzed_duration:seconds,truncated:false})
+ let channel_peaks=lanes.into_iter().map(|bucket|bucket.finish()).collect();
+ Ok(Waveform{peaks:buckets.finish(),duration:Some(seconds),analyzed_duration:seconds,truncated:false,channels:channels as u16,channel_peaks})
 }
 #[derive(Serialize,Deserialize)]struct Record{identity:Identity,wave:Waveform}
 fn key(source:&Identity)->String{format!("{:x}.json",Sha256::digest(serde_json::to_vec(source).expect("identity serializable")))}

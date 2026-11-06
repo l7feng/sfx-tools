@@ -378,9 +378,13 @@ pub fn player_status(player:tauri::State<'_,PlayerState>)->Result<PlayerSnapshot
 #[derive(Clone,Debug,Serialize,Deserialize)]
 pub struct Waveform {
     pub peaks:Vec<f32>, pub duration:Option<f64>, pub analyzed_duration:f64, pub truncated:bool,
+    /// 源文件声道数；0 表示旧缓存记录，前端按单声道处理。
+    #[serde(default)] pub channels:u16,
+    /// 每声道独立峰值包络，长度与 peaks 相同；单声道或旧缓存时为空。
+    #[serde(default)] pub channel_peaks:Vec<Vec<f32>>,
 }
 // Bump when decoding, duration calculation or bucket semantics change.
-const WAVE_CACHE_VERSION: u32 = 3;
+const WAVE_CACHE_VERSION: u32 = 4;
 const CACHE_ENTRIES: usize = 256;
 const CACHE_BYTES: u64 = 16 * 1024 * 1024;
 const CACHE_RECORD_BYTES: u64 = 128 * 1024;
@@ -410,6 +414,11 @@ fn valid_wave(wave:&Waveform)->bool{
         && wave.analyzed_duration.is_finite() && wave.analyzed_duration>0.0
         && wave.analyzed_duration<=WAVE_SECONDS as f64
         && wave.duration.is_none_or(|d|d.is_finite() && d>0.0)
+        && (wave.channel_peaks.is_empty() || (
+            wave.channels>1
+            && wave.channel_peaks.len()==wave.channels as usize
+            && wave.channel_peaks.iter().all(|row|row.len()==wave.peaks.len()
+                && row.iter().all(|p|p.is_finite() && (0.0..=1.0).contains(p)))))
 }
 fn read_cached(dir:&Path,identity:&WaveIdentity)->Option<Waveform>{
     let path=dir.join(identity.filename());
@@ -479,6 +488,12 @@ fn analyze_waveform(path:&Path)->Result<Waveform,String>{
     if let Some(error)=source.decode_error(){return Err(format!("波形解码失败：{error}"));}
     Ok(wave)
 }
+fn reduce_buckets(buckets:&[f32],bins:usize)->Vec<f32>{
+    (0..bins).map(|i|{
+        let start=i*buckets.len()/bins;let end=((i+1)*buckets.len()/bins).max(start+1);
+        buckets[start..end].iter().copied().fold(0.0f32,f32::max)
+    }).collect()
+}
 fn analyze_source(source:impl Source<Item=f32>,duration:Option<f64>)->Result<Waveform,String>{
     let rate=source.sample_rate() as u64;let channels=source.channels() as u64;
     if rate==0||channels==0{return Err("音频规格无效".into());}
@@ -488,20 +503,28 @@ fn analyze_source(source:impl Source<Item=f32>,duration:Option<f64>)->Result<Wav
     // At most 1.2 million temporary peaks within the existing 60s cap.
     // Reserve the bounded length explicitly (under 4.8MiB), avoiding Vec doubling.
     let bucket_samples=(per_second/10_000).max(1);
-    let mut buckets:Vec<f32>=Vec::with_capacity(limit.div_ceil(bucket_samples) as usize);let mut count=0u64;
+    let capacity=limit.div_ceil(bucket_samples) as usize;
+    let mut buckets:Vec<f32>=Vec::with_capacity(capacity);let mut count=0u64;
+    // 每声道独立包络：立体声上下分轨渲染靠它，单声道留空以省内存。
+    let split=channels>1;
+    let mut lanes:Vec<Vec<f32>>=if split{(0..channels).map(|_|Vec::with_capacity(capacity)).collect()}else{Vec::new()};
     for sample in source.take(limit as usize){
         if !sample.is_finite(){return Err("波形解码出现非有限采样值".into());}
         let bucket=(count/bucket_samples) as usize;
-        if bucket==buckets.len(){buckets.push(0.0);}
-        buckets[bucket]=buckets[bucket].max(sample.abs().min(1.0));count+=1;
+        if bucket==buckets.len(){
+            buckets.push(0.0);
+            for lane in lanes.iter_mut(){lane.push(0.0);}
+        }
+        let value=sample.abs().min(1.0);
+        buckets[bucket]=buckets[bucket].max(value);
+        if split{lanes[(count%channels) as usize][bucket]=lanes[(count%channels) as usize][bucket].max(value);}
+        count+=1;
     }
     if count==0{return Err("音频没有可分析的采样".into());}
     let bins=buckets.len().min(WAVE_MAX_PEAKS);
-    let peaks=(0..bins).map(|i|{
-        let start=i*buckets.len()/bins;let end=((i+1)*buckets.len()/bins).max(start+1);
-        buckets[start..end].iter().copied().fold(0.0f32,f32::max)
-    }).collect();
-    Ok(Waveform{peaks,duration,analyzed_duration:count as f64/per_second as f64,truncated:count>=limit})
+    let peaks=reduce_buckets(&buckets,bins);
+    let channel_peaks=lanes.iter().map(|lane|reduce_buckets(lane,bins)).collect();
+    Ok(Waveform{peaks,duration,analyzed_duration:count as f64/per_second as f64,truncated:count>=limit,channels:channels as u16,channel_peaks})
 }
 #[tauri::command]
 pub async fn player_waveform(id:String,catalog:tauri::State<'_,CatalogState>,player:tauri::State<'_,PlayerState>,app:tauri::AppHandle)->Result<Waveform,String>{
@@ -529,15 +552,34 @@ mod tests{
         assert_eq!(wave.analyzed_duration,1.0);
     }
     #[test]
-    fn very_short_waveform_keeps_only_existing_samples(){
-        let wave=analyze_source(rodio::buffer::SamplesBuffer::new(1,1000,vec![0.1f32,-0.5,0.0]),Some(0.003)).unwrap();
+    fn stereo_waveform_keeps_per_channel_lanes(){
+        // 左右声道电平不同：立体声要能上下分轨，单声道不应产生分轨数据。
+        let frames=2048usize;
+        let mut samples=Vec::with_capacity(frames*2);
+        for i in 0..frames{
+            let first=i<frames/2;
+            samples.push(if first{0.8f32}else{0.1});
+            samples.push(if first{0.1f32}else{0.8});
+        }
+        let wave=analyze_source(rodio::buffer::SamplesBuffer::new(2,48000,samples),Some(frames as f64/48000.0)).unwrap();
+        assert_eq!(wave.channels,2);
+        assert_eq!(wave.channel_peaks.len(),2);
+        assert!(wave.channel_peaks.iter().all(|row|row.len()==wave.peaks.len()));
+        let (left,right)=(&wave.channel_peaks[0],&wave.channel_peaks[1]);
+        assert!(left.first().copied().unwrap()>0.7&&left.last().copied().unwrap()<0.2);
+        assert!(right.first().copied().unwrap()<0.2&&right.last().copied().unwrap()>0.7);
+        let mono=analyze_source(rodio::buffer::SamplesBuffer::new(1,48000,vec![0.5f32;1024]),Some(1024.0/48000.0)).unwrap();
+        assert_eq!(mono.channels,1);assert!(mono.channel_peaks.is_empty());
+    }
+    #[test]
+    fn very_short_waveform_keeps_only_existing_samples(){        let wave=analyze_source(rodio::buffer::SamplesBuffer::new(1,1000,vec![0.1f32,-0.5,0.0]),Some(0.003)).unwrap();
         assert_eq!(wave.peaks,vec![0.1,0.5,0.0]);assert_eq!(wave.analyzed_duration,0.003);assert!(!wave.truncated);
     }
     #[test]
     fn old_wave_algorithm_records_are_not_reused(){
         let temp=TestDir::new();let path=sample("pcm-44100.wav");let identity=WaveIdentity::read(&path).unwrap();
         let mut old=WaveIdentity::read(&path).unwrap();old.version=2;
-        let old_wave=Waveform{peaks:vec![0.2;256],duration:Some(0.5),analyzed_duration:0.5,truncated:false};
+        let old_wave=Waveform{peaks:vec![0.2;256],duration:Some(0.5),analyzed_duration:0.5,truncated:false,channels:1,channel_peaks:Vec::new()};
         assert_ne!(old.filename(),identity.filename());
         // Even a stale record placed at the new key is rejected by its embedded identity.
         fs::write(temp.0.join(identity.filename()),serde_json::to_vec(&WaveRecordRef{identity:&old,wave:&old_wave}).unwrap()).unwrap();
@@ -604,7 +646,7 @@ mod tests{
         let identity=WaveIdentity::read(&source).unwrap();let record=temp.0.join(identity.filename());
         let cached=read_cached(&temp.0,&identity).unwrap();assert_eq!(first.peaks,cached.peaks);
         // An invalid but well-formed record cannot be served.
-        let invalid=Waveform{peaks:vec![2.0],duration:Some(1.0),analyzed_duration:1.0,truncated:false};
+        let invalid=Waveform{peaks:vec![2.0],duration:Some(1.0),analyzed_duration:1.0,truncated:false,channels:1,channel_peaks:Vec::new()};
         fs::write(&record,serde_json::to_vec(&WaveRecordRef{identity:&identity,wave:&invalid}).unwrap()).unwrap();
         assert!(read_cached(&temp.0,&identity).is_none());
         let recovered=cached_waveform(&source,Some(&temp.0)).unwrap();assert_eq!(first.peaks,recovered.peaks);
@@ -667,7 +709,7 @@ mod tests{
     #[test]
     fn mp3_waveform_uses_same_gapless_timeline_as_playback(){
         let path=sample("lossy-44100.mp3");let before=fs::read(&path).unwrap();let wave=analyze_waveform(&path).unwrap();
-        assert_eq!(WAVE_CACHE_VERSION,3,"含MP3填充的旧峰值不得复用");
+        assert_eq!(WAVE_CACHE_VERSION,4,"含MP3填充的旧峰值、以及缺少声道分轨的旧记录都不得复用");
         assert!((wave.analyzed_duration-0.5).abs()<1e-9,"波形时间轴必须只覆盖有效0.5秒，实际{}",wave.analyzed_duration);
         assert_eq!(wave.duration,Some(0.5));assert!(!wave.truncated);assert_eq!(wave.peaks.len(),WAVE_MAX_PEAKS);
         assert_eq!(fs::read(&path).unwrap(),before);

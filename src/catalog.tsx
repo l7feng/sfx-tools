@@ -6,7 +6,7 @@ import {formatBytes,jobLabels,resumable,displayPath} from './catalog-client';
 import type {CatalogAsset,CatalogPage,ImportJob,FolderNode} from './catalog-client';
 import {FolderTree} from './folder-tree';
 import {NativePlayer} from './native-player';
-import {AssetAnnotations} from './asset-annotations';
+import {AssetDetail} from './asset-detail';
 import {timeLabel} from './demo-data';
 import {useWorkbenchLayout,ResizeHandle} from './layout';
 import {safeLayout,selectIds,defaultLayout,visibleColumns} from './workbench-state';
@@ -162,7 +162,7 @@ function Catalog(){
      <div className="list-footer"><span>{rows.length} 条可见 / 共 {page.total} 条</span><div className="pager"><button aria-label="上一页" disabled={offset===0||busy||pageLoading} onClick={()=>{setOffset(Math.max(0,offset-PAGE_SIZE));setSelected(null);}}>‹</button><span>{Math.floor(loadedOffset/PAGE_SIZE)+1} / {Math.max(1,Math.ceil(page.total/PAGE_SIZE))}</span><button aria-label="下一页" disabled={offset+PAGE_SIZE>=page.total||busy||pageLoading} onClick={()=>{setOffset(offset+PAGE_SIZE);setSelected(null);}}>›</button></div></div>
     </>}
    </main>
-   {layout.details?<><ResizeHandle label="详情宽度" value={layout.inspector} reverse onChange={value=>resize('inspector',value)}/><aside className="inspector"><div className="panel-heading"><span>素材详情</span><button onClick={()=>toggle('details')} aria-label="折叠右侧详情栏">›</button></div><div className="inspector-content">{selected?<><div className="detail-category">{selected.format} · 原文件引用</div><h2>{selected.name}</h2><dl><div><dt>文件大小</dt><dd>{formatBytes(selected.size)}</dd></div><div><dt>时长</dt><dd>{selected.duration==null?'未知':timeLabel(selected.duration)}</dd></div><div><dt>采样率</dt><dd>{selected.rate?`${selected.rate/1000} kHz`:'未知'}</dd></div><div><dt>声道数</dt><dd>{selected.channels??'未知'}</dd></div></dl><AssetAnnotations key={selected.id} asset={selected} onChanged={patch=>{setSelected(old=>old?.id===selected.id?{...old,...patch}:old);void action(refresh);}}/><details className="file-details" open><summary>原始文件位置</summary><p>{displayPath(selected.path)}</p><p>素材ID：{selected.id}</p></details>{selected.error&&<p className="asset-error">{selected.error}</p>}</>:<p className="description">选择素材查看文件信息、收藏和标签。</p>}</div></aside></>:<aside className="panel-rail right-rail"><button onClick={()=>toggle('details')} aria-label="展开右侧详情栏">‹</button><span>详情</span></aside>}
+   {layout.details?<><ResizeHandle label="详情宽度" value={layout.inspector} reverse onChange={value=>resize('inspector',value)}/><aside className="inspector">{selected?<AssetDetail key={selected.id} asset={selected} onCollapse={()=>toggle('details')} onChanged={patch=>{setSelected(old=>old?.id===selected.id?{...old,...patch}:old);void action(refresh);}}/>:<div className="inspector-empty"><div className="panel-heading"><span>素材详情</span><button onClick={()=>toggle('details')} aria-label="折叠右侧详情栏">›</button></div><p className="description">选择素材查看文件信息、收藏和标签。</p></div>}</aside></>:<aside className="panel-rail right-rail"><button onClick={()=>toggle('details')} aria-label="展开右侧详情栏">‹</button><span>详情</span></aside>}
   </div>
   {!layout.bottomCollapsed&&<ResizeHandle label="波形高度" value={layout.wave} axis="y" reverse onChange={value=>resize('wave',value)}/>}
   <NativePlayer selected={selected} collapsed={layout.bottomCollapsed} onToggle={()=>toggle('bottomCollapsed')} defaultVolume={preferences.volume} onOpenLayer={()=>openTool('layer')}/>

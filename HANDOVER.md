@@ -1,6 +1,6 @@
 # SFX Tools 交接文档（供新 Agent 接手）
 
-> 生成：2026-11-05，最后更新 2026-11-06。当前版本 **0.1.17**（SFX Tools；Cargo/npm 包名 `sfx-tools`；debug/no-bundle，已构建并提交推送）。
+> 生成：2026-11-05，最后更新 2026-11-06。当前版本 **0.1.18**（SFX Tools；Cargo/npm 包名 `sfx-tools`；debug/no-bundle，已构建并提交推送）。
 > 本文件自包含，新 agent 无需依赖历史对话或 WorkBuddy Skill 机制即可接手。
 
 ## 1. 项目定位与关键路径
@@ -15,7 +15,7 @@
 | 元数据适配 | 知识库 `26-BWF与iXML元数据适配.md` |
 | 评测方法 | 知识库 `27-中文相关性评测方法.md`；模板 `tests/cn-relevance-eval.template.json` |
 | 活待办看板 | `D:/1-个人知识库_Vault/6-资产-R/01-待办事项/待办清单.md` |
-| 交付 EXE | `src-tauri/target/debug/sfx-tools.exe`（0.1.17，24966656 字节，2026/11/06 09:47）；桌面 `SFX Tools.lnk` 直接指向它，重建即生效 |
+| 交付 EXE | `src-tauri/target/debug/sfx-tools.exe`（0.1.18，25010176 字节，2026/11/06 10:43）；桌面 `SFX Tools.lnk` 直接指向它，重建即生效 |
 | 交接 Skill（可选） | `C:/Users/Administrator/.workbuddy-ai/skills/sound-workbench-handover/`（SKILL.md + references/handover-state.md）；zip 同目录 |
 
 技术栈：Tauri 2 + React/TypeScript + Rust + SQLite/FTS5 + Python ONNX Runtime 桥（独立 CPU 推理）。
@@ -69,7 +69,22 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 - 上游 `laion/clap-htsat-unfused` 为 Apache-2.0；`Xenova` 仓库**无 LICENSE、无 license 字段**，再分发需我们自行补齐声明（见 25 号审计「路线甲」）。
 - 长音频确定性取开头 480000 samples（10s），未与官方 `ClapFeatureExtractor` 逐帧对照。
 
-## 5. 0.1.17 已交付（本批）
+## 5. 0.1.18 已交付（本批）
+
+按人类三条反馈落地：波形配色只留蓝/白、波形要区分立体声与单声道、详情窗口按参考图整理并让标签与元数据可折叠。
+
+- 波形配色：`Preferences.waveColor` 由 `amber|mint` 改为 `blue|white`，`workspace-shell.css` 用 `.wave-blue` / `.wave-white` 两套令牌，浅色主题另给墨色版本（白底上白色波形不可见）；旧偏好值 `safePreferences` 一律回落 `blue`。
+- 声道分轨：`Waveform` 新增 `channels` 与 `channel_peaks`（player.rs / full_wave.rs），`VisualData` 新增 `channels` / `channel_peaks` / `channel_rms`（visual_analysis.rs）。前端 `envelopePath(peaks,lanes,lane)` 按轨道分区镜像，`Envelope` 传 `lanes` 即上下双轨，`channelLanes()` 只认「两条真包络」，多声道与旧缓存回落单轨。
+- 缓存：`WAVE_CACHE_VERSION` 3→4、`full_wave::VERSION` 1→2、`visual_analysis::VERSION` 1→2，旧记录整批失效重算。
+- 详情窗口：新建 `asset-detail.tsx` / `asset-detail.css`，五段分组（文件信息 / 我的标签 / 内嵌元数据 / AI 分类标签 / 原始文件位置），每段可折叠；文件信息为行式左标签右值；标签折叠态显示圆角标签或「还没有标签」，点「编辑」展开 textarea；元数据折叠态右侧为「编辑」，展开后显示 bext/iXML 状态与单列输入框（面板只有两百余像素宽，双列会被裁）。
+- 元数据读取合并：`useBwfMeta` 提升到详情层，`BwfMetadataPanel` 支持 `injected` / `useInjected` 注入，一个素材只读一次；写回后 `onSaved` 触发 detail reload。`asset-annotations.tsx` 已删除。
+- 测试：新增 `stereo_waveform_keeps_per_channel_lanes`；`player::tests` 19 项、`visual_analysis` 4 项、`full_wave` 3 项通过。全量 `cargo test --bin sfx-tools` 152 通过 / 6 忽略 / 2 失败，失败项与改动无关——`catalog::tests::real_worker_cancel_resume_and_single_task_guard` 是 `Instant::now() < deadline` 超时断言（本机沙箱慢），`model_download::tests::single_file_full_download_is_verified` 需要外网。
+- 实测：合成立体声（左前段满、右后段满）与单声道各一条，导入临时目录后 `channel_peaks` 前后半段均值 0.393 / 0.035 与信号一致，单声道为空；验收后临时条目已从素材库移除，临时音频留在 `D://My-Temporary//sw-audio`。
+
+未收口：列表小波形 34px 高、立体声每轨约 16px，只够看「上下两条」形态；「按频谱着色」模式未下线；频谱画布配色未接新配色。
+
+### 0.1.17 界面主题化与工具页图标
+
 
 按人类六条界面反馈落地，全部改动在前端，Rust 侧未动。
 

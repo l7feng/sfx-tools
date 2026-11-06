@@ -4,15 +4,21 @@ import type {CatalogAsset} from './catalog-client';
 import {envelopePath,fractionAt,getWaveform,waveformKey,waveformPosition} from './waveform-data';
 import type {WaveformData} from './waveform-data';
 
-export function Envelope({peaks,progress=0,cursor=null,className=''}:{peaks:number[];progress?:number;cursor?:number|null;className?:string}){
- const path=useMemo(()=>envelopePath(peaks),[peaks]);
+/** `lanes` 传入两条声道包络时按上下轨渲染（立体声）；否则用 `peaks` 单轨渲染。 */
+export function Envelope({peaks,lanes,progress=0,cursor=null,className=''}:{peaks:number[];lanes?:number[][]|null;progress?:number;cursor?:number|null;className?:string}){
+ const stereo=lanes&&lanes.length===2&&lanes[0].length>0&&lanes[1].length>0?lanes:null;
+ const paths=useMemo(()=>stereo?stereo.map((row,index)=>envelopePath(row,2,index)):[envelopePath(peaks)],[stereo,peaks]);
  const bound=(value:number)=>Math.max(0,Math.min(1,Number.isFinite(value)?value:0))*1000;
- return <svg className={`wave-envelope ${className}`} viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
-  <path className="wave-envelope-shape" d={path} fill="currentColor"/>
+ return <svg className={`wave-envelope ${className}${stereo?' is-stereo':''}`} viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
+  {stereo&&<line className="wave-envelope-divider" x1="0" x2="1000" y1="50" y2="50" stroke="currentColor" vectorEffect="non-scaling-stroke"/>}
+  {paths.map((path,index)=><path key={index} className="wave-envelope-shape" d={path} fill="currentColor"/>)}
   {progress>0&&<line className="wave-envelope-progress" x1={bound(progress)} x2={bound(progress)} y1="0" y2="100" stroke="currentColor" vectorEffect="non-scaling-stroke"/>}
   {cursor!==null&&<line className="wave-envelope-cursor" x1={bound(cursor)} x2={bound(cursor)} y1="0" y2="100" stroke="currentColor" vectorEffect="non-scaling-stroke"/>}
  </svg>;
 }
+
+/** 两条真峰值包络才算立体声；多声道（5.1 等）与旧缓存一律按单声道路径渲染。 */
+export function channelLanes(data:{channel_peaks?:number[][]}|null|undefined){const lanes=data?.channel_peaks;return lanes&&lanes.length===2?lanes:null;}
 
 const label=(seconds:number)=>`${Math.floor(seconds/60)}:${(seconds%60).toFixed(1).padStart(4,'0')}`;
 /** 源文件本身不在了：重试没有意义，必须明确告诉人"文件缺失"而不是"波形暂不可用"。 */
@@ -56,6 +62,6 @@ export function MiniWaveform({asset,onChoose}:{asset:CatalogAsset;onChoose?:(ass
   onClick={e=>{e.stopPropagation();if(error&&!wave){if(!isMissingSourceError(error)){setRetry(value=>value+1);setVisible(true);}return;}const rect=e.currentTarget.getBoundingClientRect();const fraction=e.detail===0?keyboard:fractionAt(e.clientX,rect.left,rect.width);setKeyboard(fraction);void preview(fraction);}}
   onFocus={()=>setVisible(true)}
   onKeyDown={e=>{e.stopPropagation();if(['ArrowLeft','ArrowRight','Home','End','Enter',' '].includes(e.key))e.preventDefault();if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key))setCursor(null);if(e.key==='ArrowLeft')setKeyboard(v=>Math.max(0,v-.02));else if(e.key==='ArrowRight')setKeyboard(v=>Math.min(1,v+.02));else if(e.key==='Home')setKeyboard(0);else if(e.key==='End')setKeyboard(1);else if(e.key==='Enter'&&!e.repeat){if(error&&!wave){if(!isMissingSourceError(error))setRetry(v=>v+1);}else void preview(keyboard);}}}>
-  {wave?<><Envelope peaks={wave.peaks} cursor={cursor??keyboard}/><span className="mini-waveform-time">{label(position)}{wave.truncated?' · 前段':''}</span></>:<span className={`mini-waveform-message${error&&isMissingSourceError(error)?' is-missing':''}`}>{error?(isMissingSourceError(error)?'文件缺失':'波形暂不可用 · 点击重试'):asset.status!=='ready'?'素材不可用':visible?'读取峰值…':'波形'}</span>}
+  {wave?<><Envelope peaks={wave.peaks} lanes={channelLanes(wave)} cursor={cursor??keyboard}/><span className="mini-waveform-time">{label(position)}{wave.truncated?' · 前段':''}</span></>:<span className={`mini-waveform-message${error&&isMissingSourceError(error)?' is-missing':''}`}>{error?(isMissingSourceError(error)?'文件缺失':'波形暂不可用 · 点击重试'):asset.status!=='ready'?'素材不可用':visible?'读取峰值…':'波形'}</span>}
  </div>;
 }

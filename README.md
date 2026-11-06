@@ -1,6 +1,6 @@
 # SFX Tools（音效与音乐素材工作台）
 
-当前同步 0.1.17 开发源码，仅用于私有开发。可运行版本入口：`D:/Ai-Files/Repos/GitHub/sound-workbench/src-tauri/target/debug/sfx-tools.exe`（debug/no-bundle，非安装包）。源码构建及验证入口见下文。首次 Git 提交从本次源码快照开始，不包含本机素材库、账号数据及构建缓存。
+当前同步 0.1.18 开发源码，仅用于私有开发。可运行版本入口：`D:/Ai-Files/Repos/GitHub/sound-workbench/src-tauri/target/debug/sfx-tools.exe`（debug/no-bundle，非安装包）。源码构建及验证入口见下文。首次 Git 提交从本次源码快照开始，不包含本机素材库、账号数据及构建缓存。
 
 音效管理软件独立重写，开发代号。当前推进二三期功能及0.1.5底部工具/完整波形，实际验证与当前状态以知识库Documentation为准；下文旧阶段内容保留为历史记录。
 
@@ -192,3 +192,19 @@
 
 边界：`spectral-view.css` 仍留 12 处频谱画布配色（刻意保持深底，避免浅色下频谱对比不足）；素材标签的 6 种分类色与 `#0006/#0008/#0009` 阴影未收编为变量；波形配色仍是既有「暖金／青绿」偏好项，未与强调色联动；`src-tauri/icons/*` 三版候选图标仍待人类选定，未纳入提交；安装包未生成。
 
+## 0.1.18 波形声道分轨与详情窗口重排
+
+按人类反馈「波形配色只留蓝、白」「波形要能区分立体声与单声道」「详情窗口按参考图整理、标签与元数据可折叠」重做。
+
+- 波形配色：删除「暖金 / 青绿」两套，改为「蓝 / 白」。浅色主题下白色波形自动转墨色（否则白底上不可见）；旧的 `amber`／`mint` 偏好值一律回落到蓝色，不需要手动重设。
+- 声道分轨：三处波形数据源都补了每声道包络——`player_waveform`（列表前段 60 秒）、`full_wave`（播放器全长）、`visual_analysis`（峰值/RMS、频谱、组合模式）。立体声按上下两轨绘制、中间一条分隔线、左侧 L / R 标记；单声道仍是单条居中；多声道（5.1 等）回落单条，不硬拆。
+- `visual_analysis` 另记每声道 RMS，立体声下「外层峰值 + 内层 RMS」也能分轨显示，不会出现峰值两条、RMS 一条的错位。
+- 缓存口径：`WAVE_CACHE_VERSION` 3→4、完整波形 `VERSION` 1→2、可视化 `VERSION` 1→2。旧记录缺分轨字段，必须整批失效重算，靠版本号比按字段兜底更可靠。
+- 详情窗口：新建 `src/asset-detail.tsx` 与 `asset-detail.css`，按参考图重排为「文件信息 / 我的标签 / 内嵌元数据 / AI 分类标签 / 原始文件位置」五段，每段可折叠；文件信息是行式「左标签 + 右对齐值」，超长省略并在悬停时给全文。
+- 标签与元数据：折叠态只显示标签小圆点或一句话状态（「还没有标签」／「暂无嵌入元数据」），点「编辑」才展开输入框；元数据折叠时右侧是「编辑」，展开后换成 bext / iXML 状态。
+- 读取合并：`useBwfMeta` 提到详情层，`BwfMetadataPanel` 新增 `injected` / `useInjected` 注入参数，同一素材只读一次元数据；写回后刷新详情与面板两处。原 `asset-annotations.tsx` 删除。
+- 验收：`player::tests` 19 项、`visual_analysis` 4 项、`full_wave` 3 项通过（新增 `stereo_waveform_keeps_per_channel_lanes`）；全量 `cargo test` 152 通过 / 2 失败（`catalog::real_worker_cancel_resume_and_single_task_guard` 的超时断言、`model_download::single_file_full_download_is_verified` 需外网，均为既有偶发，与本轮无关）；`tsc --noEmit` 与 debug 构建通过；EXE 0.1.18，25010176 字节，2026/11/06 10:43。
+- 实测：合成一段「左声道前 1.5 秒满、右声道后 1.5 秒满」的立体声与一段单声道，导入临时目录验证——`channel_peaks` 前后半段均值为 0.393 / 0.035，与信号完全一致；单声道 `channel_peaks` 为空、列表按单轨渲染。验收后临时条目已从素材库移除。
+
+边界：列表小波形只有 34px 高，立体声两轨各约 16px，够看出「上下两条 + 分隔线」，看不清左右电平细节；`spectral-view.css` 的画布配色未接新配色；「按频谱着色」模式仍然保留，是否下线待定。
+

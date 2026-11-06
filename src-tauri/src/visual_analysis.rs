@@ -5,7 +5,7 @@ use serde::{Serialize,Deserialize};
 use sha2::{Digest,Sha256};
 use std::{collections::VecDeque,fs::{self,File,OpenOptions},io::{Read,Write},path::{Path,PathBuf},sync::{Arc,Mutex,atomic::{AtomicBool,AtomicUsize,Ordering}},time::{Duration,Instant,UNIX_EPOCH}};
 use uuid::Uuid;
-const FFT:usize=1024;const TIME_BINS:usize=256;const FREQ_BINS:usize=64;const ENVELOPE_BINS:usize=2048;const VERSION:u32=1;const RECORD_LIMIT:u64=1024*1024;const CACHE_LIMIT:u64=32*1024*1024;
+const FFT:usize=1024;const TIME_BINS:usize=256;const FREQ_BINS:usize=64;const ENVELOPE_BINS:usize=2048;const VERSION:u32=2;const RECORD_LIMIT:u64=1024*1024;const CACHE_LIMIT:u64=32*1024*1024;
 fn err(e:impl std::fmt::Display)->String{e.to_string()}
 #[derive(Clone,Debug,Serialize,Deserialize,PartialEq)]struct Identity{path:PathBuf,size:u64,modified:String,version:u32}
 fn identity(catalog:&CatalogState,id:&str)->Result<Identity,String>{
@@ -16,7 +16,13 @@ fn identity(catalog:&CatalogState,id:&str)->Result<Identity,String>{
  if size!=meta.len()||stamp!=modified{return Err("素材已变化，请先重新扫描再分析频谱。".into());}
  Ok(Identity{path,size,modified,version:VERSION})
 }
-#[derive(Clone,Debug,Serialize,Deserialize)]pub struct VisualData{pub duration:f64,pub rate:u32,pub peaks:Vec<f32>,pub rms:Vec<f32>,pub spectrum:Vec<Vec<f32>>,pub frequencies:Vec<f64>,pub centroids:Vec<f64>,pub fft_size:usize,pub window_count:usize}
+#[derive(Clone,Debug,Serialize,Deserialize)]pub struct VisualData{pub duration:f64,pub rate:u32,pub peaks:Vec<f32>,pub rms:Vec<f32>,pub spectrum:Vec<Vec<f32>>,pub frequencies:Vec<f64>,pub centroids:Vec<f64>,pub fft_size:usize,pub window_count:usize,
+ /// 源文件声道数；旧缓存记录为 0，前端按单声道渲染。
+ #[serde(default)]pub channels:u16,
+ /// 每声道独立峰值包络（与 peaks 等长），单声道或旧缓存时为空。
+ #[serde(default)]pub channel_peaks:Vec<Vec<f32>>,
+ /// 每声道独立 RMS（与 peaks 等长），供立体声分轨画内层 RMS。
+ #[serde(default)]pub channel_rms:Vec<Vec<f32>>}
 #[derive(Clone,Debug,Serialize)]pub struct VisualSnapshot{pub job_id:String,pub asset_id:String,pub status:String,pub progress:Option<f64>,pub analyzed_seconds:f64,pub error:Option<String>,pub result:Option<VisualData>}
 struct Job{snapshot:VisualSnapshot,cancel:Arc<AtomicBool>}
 #[derive(Clone)]pub struct VisualAnalysisState{root:PathBuf,jobs:Arc<Mutex<Vec<Job>>>,active:Arc<AtomicUsize>}
@@ -63,12 +69,12 @@ fn analyze(source:&mut PlaybackSource,cancel:&AtomicBool,mut progress:impl FnMut
  let expected=source.total_duration().ok_or("高级波形需要可读取的文件头时长，请重新扫描或转换格式。")?.as_secs_f64();
  if !expected.is_finite()||expected<=0.0{return Err("音频时长无效。".into());}
  let total=(expected*rate as f64).round() as u64;if total==0{return Err("音频没有采样。".into());}
- let bins=ENVELOPE_BINS.min(total as usize);let mut peak=vec![0f32;bins];let mut squares=vec![0f64;bins];let mut count=vec![0u64;bins];
+ let bins=ENVELOPE_BINS.min(total as usize);let mut peak=vec![0f32;bins];let mut lanes:Vec<Vec<f32>>=if channels>1{(0..channels).map(|_|vec![0f32;bins]).collect()}else{Vec::new()};let mut lane_squares:Vec<Vec<f64>>=if channels>1{(0..channels).map(|_|vec![0f64;bins]).collect()}else{Vec::new()};let mut squares=vec![0f64;bins];let mut count=vec![0u64;bins];
  let window=FFT.min(total as usize);let ends:Vec<u64>=(0..TIME_BINS).map(|i|{let center=((i as f64+0.5)*total as f64/TIME_BINS as f64).round() as u64;center.saturating_sub(window as u64/2).min(total-window as u64)+window as u64}).collect();
  let mut rings:Vec<VecDeque<f32>>=(0..channels).map(|_|VecDeque::with_capacity(FFT)).collect();let mut spectrum=Vec::with_capacity(TIME_BINS);let mut centroids=Vec::with_capacity(TIME_BINS);let (mut frame,mut next)=(0u64,0usize);let mut last=Instant::now();
  loop{if frame%2048==0&&cancel.load(Ordering::Acquire){return Err("高级波形分析已取消。".into());}
   let Some(first)=source.next()else{break};let bin=((frame as f64*bins as f64/total as f64) as usize).min(bins-1);let mut energy=0f64;
-  for channel in 0..channels{let v=if channel==0{first}else{source.next().ok_or("声道采样不完整。")?};if !v.is_finite(){return Err("源音频包含非有限采样。".into());}peak[bin]=peak[bin].max(v.abs().min(1.0));energy+=v as f64*v as f64;let ring=&mut rings[channel];if ring.len()==FFT{ring.pop_front();}ring.push_back(v);}
+  for channel in 0..channels{let v=if channel==0{first}else{source.next().ok_or("声道采样不完整。")?};if !v.is_finite(){return Err("源音频包含非有限采样。".into());}let level=v.abs().min(1.0);peak[bin]=peak[bin].max(level);if channels>1{lanes[channel][bin]=lanes[channel][bin].max(level);lane_squares[channel][bin]+=v as f64*v as f64;}energy+=v as f64*v as f64;let ring=&mut rings[channel];if ring.len()==FFT{ring.pop_front();}ring.push_back(v);}
   squares[bin]+=energy/channels as f64;count[bin]+=1;frame+=1;
   if next<TIME_BINS&&frame>=ends[next]{let (db,centroid)=bands(&rings,rate);while next<TIME_BINS&&frame>=ends[next]{spectrum.push(db.clone());centroids.push(centroid);next+=1;}}
   if last.elapsed()>=Duration::from_millis(100){progress(frame as f64/rate as f64,(frame as f64/total as f64).min(0.999));last=Instant::now();}
@@ -76,15 +82,16 @@ fn analyze(source:&mut PlaybackSource,cancel:&AtomicBool,mut progress:impl FnMut
  if let Some(error)=source.decode_error(){return Err(format!("高级波形解码失败：{error}"));}
  if frame.abs_diff(total)>2{return Err("实际采样长度与文件头不一致。".into());}if frame==0{return Err("音频没有有效采样。".into());}
  if spectrum.len()!=TIME_BINS{return Err("频谱窗分析不完整。".into());}
+ let channel_rms:Vec<Vec<f32>>=lane_squares.iter().map(|row|row.iter().zip(&count).map(|(sum,n)|if *n==0{0.0}else{(*sum/ *n as f64).sqrt().min(1.0) as f32}).collect()).collect();
  let rms=squares.iter().zip(count).map(|(sum,n)|if n==0{0.0}else{(sum/n as f64).sqrt().min(1.0) as f32}).collect();
  let high=rate as f64/2.0;let low=20f64.min(high/2.0);let frequencies=(0..FREQ_BINS).map(|b|low*(high/low).powf((b as f64+0.5)/FREQ_BINS as f64)).collect();
- Ok(VisualData{duration:frame as f64/rate as f64,rate,peaks:peak,rms,spectrum,frequencies,centroids,fft_size:FFT,window_count:TIME_BINS})
+ Ok(VisualData{duration:frame as f64/rate as f64,rate,peaks:peak,rms,spectrum,frequencies,centroids,fft_size:FFT,window_count:TIME_BINS,channels:channels as u16,channel_peaks:lanes,channel_rms})
 }
 #[derive(Serialize,Deserialize)]struct Record{identity:Identity,data:VisualData}
 fn link(meta:&fs::Metadata)->bool{#[cfg(windows)]{use std::os::windows::fs::MetadataExt;meta.file_attributes()&0x400!=0}#[cfg(not(windows))]{meta.file_type().is_symlink()}}
 fn safe_root(root:&Path)->bool{root.is_absolute()&&root.ancestors().all(|p|fs::symlink_metadata(p).map(|m|!link(&m)).unwrap_or(true))}
 fn key(source:&Identity)->String{format!("{:x}.json",Sha256::digest(serde_json::to_vec(source).expect("identity")))}
-fn valid(data:&VisualData)->bool{data.duration.is_finite()&&data.duration>0.0&&data.rate>0&&data.peaks.len()>0&&data.peaks.len()<=ENVELOPE_BINS&&data.peaks.len()==data.rms.len()&&data.spectrum.len()==TIME_BINS&&data.centroids.len()==TIME_BINS&&data.frequencies.len()==FREQ_BINS&&data.fft_size==FFT&&data.window_count==TIME_BINS&&data.peaks.iter().chain(&data.rms).all(|x|x.is_finite()&&(0.0..=1.0).contains(x))&&data.spectrum.iter().all(|row|row.len()==FREQ_BINS&&row.iter().all(|x|x.is_finite()&&(-100.0..=0.0).contains(x)))&&data.centroids.iter().all(|x|x.is_finite()&&*x>=0.0&&*x<=data.rate as f64/2.0)&&data.frequencies.iter().all(|x|x.is_finite()&&*x>0.0)}
+fn valid(data:&VisualData)->bool{data.duration.is_finite()&&data.duration>0.0&&data.rate>0&&data.peaks.len()>0&&data.peaks.len()<=ENVELOPE_BINS&&data.peaks.len()==data.rms.len()&&data.spectrum.len()==TIME_BINS&&data.centroids.len()==TIME_BINS&&data.frequencies.len()==FREQ_BINS&&data.fft_size==FFT&&data.window_count==TIME_BINS&&data.peaks.iter().chain(&data.rms).all(|x|x.is_finite()&&(0.0..=1.0).contains(x))&&data.spectrum.iter().all(|row|row.len()==FREQ_BINS&&row.iter().all(|x|x.is_finite()&&(-100.0..=0.0).contains(x)))&&data.centroids.iter().all(|x|x.is_finite()&&*x>=0.0&&*x<=data.rate as f64/2.0)&&data.frequencies.iter().all(|x|x.is_finite()&&*x>0.0)&&(data.channel_peaks.is_empty()||(data.channels>1&&data.channel_peaks.len()==data.channels as usize&&data.channel_peaks.iter().all(|row|row.len()==data.peaks.len()&&row.iter().all(|x|x.is_finite()&&(0.0..=1.0).contains(x)))&&data.channel_rms.iter().all(|row|row.len()==data.peaks.len()&&row.iter().all(|x|x.is_finite()&&(0.0..=1.0).contains(x)))))}
 fn read_cache(root:&Path,source:&Identity)->Option<VisualData>{if !safe_root(root){return None;}let path=root.join(key(source));let meta=fs::symlink_metadata(&path).ok()?;if !meta.is_file()||link(&meta)||meta.len()>RECORD_LIMIT{return None;}let mut bytes=vec![];File::open(path).ok()?.take(RECORD_LIMIT+1).read_to_end(&mut bytes).ok()?;let record:Record=serde_json::from_slice(&bytes).ok()?;(record.identity==*source&&valid(&record.data)).then_some(record.data)}
 fn write_cache(root:&Path,source:&Identity,data:&VisualData){
  if !safe_root(root)||fs::create_dir_all(root).is_err(){return;}let Ok(bytes)=serde_json::to_vec(&Record{identity:source.clone(),data:data.clone()})else{return};if bytes.len() as u64>RECORD_LIMIT{return;}let target=root.join(key(source));if target.exists(){if read_cache(root,source).is_some(){return;}if fs::symlink_metadata(&target).map(|m|m.is_file()&&!link(&m)).unwrap_or(false){if fs::remove_file(&target).is_err(){return;}}else{return;}}
