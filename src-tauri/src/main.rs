@@ -21,6 +21,8 @@ mod visual_analysis;
 mod licensing;
 mod workbench_jobs;
 mod bwf_metadata;
+mod multilingual;
+mod settings_ops;
 use tauri::Manager;
 
 #[tauri::command]
@@ -40,24 +42,27 @@ fn main() {
         .setup(|app| {
             let data = app.path().app_local_data_dir()?;
             std::fs::create_dir_all(&data)?;
+            // 所有可再生缓存统一受设置页「波形图缓存路径」治理；自定义根下次启动生效。
+            let cache = settings_ops::init(app, &data).map_err(std::io::Error::other)?;
             let audio_text_dir = data.join("audio-text-v1");
             std::fs::create_dir_all(&audio_text_dir)?;
             let state = catalog::CatalogState::new(data.join("catalog.sqlite"))
                 .map_err(std::io::Error::other)?;
             app.manage(state);
             app.manage(player::PlayerState::new());
-            app.manage(full_wave::FullWaveState::new(app.path().app_cache_dir()?.join("full-wave-v1")));
-            app.manage(audio_tools::AudioToolsState::new(app.path().app_cache_dir()?.join("audio-tools-v1")));
-            app.manage(layer_render::LayerRenderState::new(app.path().app_cache_dir()?.join("layer-renders-v1")));
+            app.manage(full_wave::FullWaveState::new(cache.join("full-wave-v1")));
+            app.manage(audio_tools::AudioToolsState::new(cache.join("audio-tools-v1")));
+            app.manage(layer_render::LayerRenderState::new(cache.join("layer-renders-v1")));
             app.manage(audio_index::AudioIndexState::new(data.join("audio-index-v1")));
             app.manage(model_registry::ModelRegistryState::new(data.join("model-registry-v1")));
             app.manage(model_download::ModelDownloadState::new(data.join("model-downloads-v1")));
             app.manage(audio_text::AudioTextState::new(audio_text_dir));
             app.manage(semantic_vector::SemanticVectorState::new(data.join("semantic-vector-v1")));
-            app.manage(visual_analysis::VisualAnalysisState::new(app.path().app_cache_dir()?.join("visual-analysis-v1")));
+            app.manage(visual_analysis::VisualAnalysisState::new(cache.join("visual-analysis-v1")));
             app.manage(licensing::LicenseState::new(data.join("licensing-v1")));
-            app.manage(workbench_jobs::WorkbenchJobsState::new(app.path().app_cache_dir()?.join("library-maintenance-v1")));
+            app.manage(workbench_jobs::WorkbenchJobsState::new(cache.join("library-maintenance-v1")));
             app.manage(semantic::SemanticState::new(data.join("semantic")));
+            app.manage(settings_ops::SettingsState::new(cache, data.clone(), data.join("catalog.sqlite")));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -91,6 +96,7 @@ fn main() {
             catalog::catalog_history,
             catalog::catalog_folders,
             folder_picker::catalog_pick_folder,
+            folder_picker::settings_pick_folder,
             catalog::catalog_set_favorite,
             catalog::catalog_set_tags,
             catalog::catalog_check_availability,
@@ -155,7 +161,20 @@ fn main() {
             player::player_preview_at,
             player::player_control,
             player::player_status,
-            player::player_waveform
+            player::player_waveform,
+            settings_ops::settings_cache_info,
+            settings_ops::settings_cache_set_enabled,
+            settings_ops::settings_cache_set_root,
+            settings_ops::settings_cache_clear,
+            settings_ops::settings_temp_clear,
+            settings_ops::settings_open_folder,
+            settings_ops::settings_cache_pregenerate,
+            settings_ops::settings_cache_progress,
+            settings_ops::settings_cache_cancel,
+            settings_ops::settings_output_devices,
+            settings_ops::settings_player_set_device,
+            settings_ops::settings_backup_list,
+            settings_ops::settings_backup_create
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 启动失败");

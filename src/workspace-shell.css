@@ -123,3 +123,36 @@
 .row-icon-button{width:24px;height:24px;min-width:24px;min-height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--muted);font-size:15px;line-height:1}
 .row-icon-button:hover{border-color:var(--line);color:var(--text);background:var(--raised-hover)}
 .row-favorite.is-on{color:var(--accent)}
+
+/* 0.1.20：搜索条跨语言开关、列表简化小波形单色单线、设置页新增面板。 */
+.top-search .search-toggle{flex:0 0 auto;min-height:22px;height:22px;padding:0 7px;border:1px solid var(--line);border-radius:3px;background:transparent;color:var(--muted);font-size:11px;white-space:nowrap}
+.top-search .search-toggle:hover{color:var(--text)}
+.top-search .search-toggle[aria-pressed=true]{color:var(--accent);border-color:var(--accent-line);background:var(--accent-wash)}
+/* 简化模式：去掉「浅色描边 + 深色填充」的叠加观感，整条波形只用一个实色。
+   注意这只是渲染层；后端仍解码全长，提速来自单条包络、流式降采样与缓存复用。 */
+.mini-waveform.is-simple .wave-envelope-shape{fill:var(--wave-color);stroke:var(--wave-color);stroke-width:0;shape-rendering:crispEdges}
+.mini-waveform.is-simple .wave-envelope-divider{display:none}
+.settings-body>section hr.settings-divider{border:0;border-top:1px solid var(--line);margin:22px 0 18px}
+.settings-lead p{margin:2px 0 10px}
+.settings-card{border:1px solid var(--line);border-radius:5px;background:var(--panel);padding:12px 14px;margin:12px 0}
+.settings-card h4,.settings-subhead{font-size:13px;font-weight:500;margin:0 0 10px}
+.settings-subhead{margin-top:18px}
+.settings-path,.settings-path-line span{width:100%;font:11px/1.6 var(--mono);color:var(--text);background:var(--raised);border:1px solid var(--line);border-radius:3px;padding:6px 8px;box-sizing:border-box;overflow-wrap:anywhere}
+.settings-path-line{font-size:12px;color:var(--muted);margin:8px 0 14px}
+.settings-path-line span{display:block;margin-top:6px}
+.settings-row{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0 4px}
+.settings-row button,.settings-wide{border:1px solid var(--line);font-size:12px}
+.settings-wide{width:100%;margin:8px 0}
+.settings-stats{font-size:12px;margin:6px 0!important}
+.settings-stats strong{color:var(--text);font-family:var(--mono)}
+.settings-group{font-size:11px;color:var(--muted);margin:3px 0!important;line-height:1.6}
+.settings-hint{color:var(--accent)}
+.settings-job{font:11px/1.7 var(--mono);color:var(--muted)}
+.settings-message{font-size:12px;color:var(--accent);margin:12px 0 0!important}
+.settings-card button.danger{background:#c8505f;border-color:#c8505f;color:#fff}
+.settings-card button.danger:hover{background:#d6606f}
+.settings-body button.primary{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.settings-backup-list{list-style:none;margin:0;padding:0;max-height:180px;overflow:auto}
+.settings-backup-list li{display:flex;justify-content:space-between;gap:10px;padding:5px 7px;border-bottom:1px solid var(--line);font-size:12px}
+.settings-backup-list li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono)}
+.settings-backup-list li small{color:var(--muted);white-space:nowrap}

@@ -9,7 +9,7 @@ import {NativePlayer} from './native-player';
 import {AssetDetail} from './asset-detail';
 import {timeLabel} from './demo-data';
 import {useWorkbenchLayout,ResizeHandle} from './layout';
-import {safeLayout,selectIds,defaultLayout,visibleColumns,safeSort,nextSort,type SortField,type ColumnId} from './workbench-state';
+import {safeLayout,selectIds,defaultLayout,visibleColumns,safeSort,nextSort,type SortField,type ColumnId,type Layout} from './workbench-state';
 import {ColumnSettings} from './column-settings';
 import {PlaylistPicker} from './playlist-picker';
 import {useAppVersion} from './app-version';
@@ -57,6 +57,9 @@ function Catalog(){
  useEffect(()=>{try{localStorage.setItem('sound-workbench-pins-open-v1',pinsOpen?'1':'0');}catch{/* 存储不可用不影响展开 */}},[pinsOpen]);
  const native=isTauri(),{preferences,setPreferences}=usePreferences();
  const {layout,setLayout,style}=useWorkbenchLayout(preferences.rememberLayout);
+ const layoutRef=useRef(layout);layoutRef.current=layout;
+ /** 进入音频工具页时折叠三栏，离开时还原素材库布局；工具页里手动展开的面板照常可用。 */
+ const toolsRestore=useRef<Pick<Layout,'leftCollapsed'|'details'|'bottomCollapsed'>|null>(null);
  const [workspacePage,setWorkspacePage]=useState<WorkspacePage>(preferences.startPage),[library,setLibrary]=useState<Library>(preferences.startPage==='music'?'music':'sound');
  const shownColumns=visibleColumns(layout,library);
  const [columnMenu,setColumnMenu]=useState<{x:number;y:number}|null>(null);
@@ -77,7 +80,7 @@ function Catalog(){
  const treeStamp=useRef(''),dropHandler=useRef<(paths:string[])=>void>(()=>{}),reportedProblems=useRef(new Set<string>());
  const lock=useRef(false),dialog=useRef<HTMLDialogElement>(null),search=useRef<HTMLInputElement>(null),generation=useRef(0),alive=useRef(true);
  const effectiveFolder=searchFolder(folder,debouncedQuery,searchScope);
- const scopeKey=JSON.stringify([library,effectiveFolder,offset,debouncedQuery,format,sort,favoritesOnly,tag,historyOnly,playlistId,duration,extraTags]);
+ const scopeKey=JSON.stringify([library,effectiveFolder,offset,debouncedQuery,format,sort,favoritesOnly,tag,historyOnly,playlistId,duration,extraTags,preferences.multilingualSearch]);
  const scopeRef=useRef(scopeKey);scopeRef.current=scopeKey;
  const pageLoading=scopeKey!==loadedKey,rows=pageLoading?[]:page.items,selectedIds=selection;
  const running=jobs.some(job=>['running','queued','cancelling'].includes(job.status));
@@ -97,15 +100,20 @@ function Catalog(){
   }
  };
  const openTool=(tool:ToolPage|null)=>{setToolQuery('');setActiveTool(tool);if(tool&&toolArea(tool)==='library'){if(workspacePage==='tools')setLibraryToolsOpen(false);else setLibraryToolsOpen(true);}else{setLibraryToolsOpen(false);switchPage('tools');}};
+ const audition=(asset:CatalogAsset)=>{void invoke('player_load',{id:asset.id}).catch(e=>{if(alive.current)setError(String(e));});};
  const choose=(asset:CatalogAsset,event?:{ctrlKey:boolean;metaKey:boolean;shiftKey:boolean})=>{
-  setSelection(old=>selectIds(rows.map(item=>item.id),old,asset.id,anchor.current,!!event&&(event.ctrlKey||event.metaKey),!!event?.shiftKey));
-  if(!event?.shiftKey)anchor.current=asset.id;setSelected(asset);
+  const additive=!!event&&(event.ctrlKey||event.metaKey);
+  setSelection(old=>selectIds(rows.map(item=>item.id),old,asset.id,anchor.current,additive,!!event?.shiftKey));
+  if(!event?.shiftKey)anchor.current=asset.id;
+  const same=selected?.id===asset.id;setSelected(asset);
+  // 图片#2：选中即试听 / 重新选中同一文件时从头播放；多选与范围选择不触发。
+  if(native&&preferences.auditionOnSelect&&asset.status==='ready'&&!additive&&!event?.shiftKey&&(!same||preferences.replaySameFromStart))audition(asset);
  };
  const chooseExternal=(item:CatalogAsset)=>{setSelected(item);setSelection([item.id]);};
  const toggleRowFavorite=(asset:CatalogAsset)=>{void (async()=>{try{const favorite=!asset.favorite;await invoke('catalog_set_favorite',{id:asset.id,favorite});setSelected(old=>old?.id===asset.id?{...old,favorite}:old);await refresh();}catch(e){setError(String(e));}})();};
  const refresh=useCallback(async()=>{
   if(scopeRef.current!==scopeKey)return;const token=++generation.current;
-  const [next,nextJobs,nextOverview]=await Promise.all([invoke<CatalogPage>('catalog_list',{offset,limit:PAGE_SIZE,folder:effectiveFolder,query:debouncedQuery,format:format==='全部格式'?null:format,sort,favoritesOnly,library,tag,historyOnly,playlistId,tags:extraTags.length?extraTags:null,minDuration:duration.min,maxDuration:duration.max}),invoke<ImportJob[]>('catalog_jobs'),invoke<LibraryOverview>('library_overview',{library})]);
+  const [next,nextJobs,nextOverview]=await Promise.all([invoke<CatalogPage>('catalog_list',{offset,limit:PAGE_SIZE,folder:effectiveFolder,query:debouncedQuery,format:format==='全部格式'?null:format,sort,favoritesOnly,library,tag,historyOnly,playlistId,tags:extraTags.length?extraTags:null,minDuration:duration.min,maxDuration:duration.max,multilingual:preferences.multilingualSearch}),invoke<ImportJob[]>('catalog_jobs'),invoke<LibraryOverview>('library_overview',{library})]);
   if(!alive.current||token!==generation.current||scopeRef.current!==scopeKey)return;
   if(offset>0&&next.total<=offset){setOffset(Math.max(0,Math.floor(Math.max(0,next.total-1)/PAGE_SIZE)*PAGE_SIZE));return;}
   setPage(next);setLoadedOffset(offset);setLoadedKey(scopeKey);setJobs(nextJobs);setOverview(nextOverview);
@@ -117,8 +125,22 @@ function Catalog(){
   }
   for(const job of nextJobs){const key=`${job.id}:${job.status}`;if(['failed','interrupted','completed_with_errors'].includes(job.status)&&!reportedProblems.current.has(key)){reportedProblems.current.add(key);setShowJobs(true);}}
   setSelected(old=>old?next.items.find(item=>item.id===old.id)??old:null);
- },[offset,effectiveFolder,debouncedQuery,format,sort,favoritesOnly,library,tag,historyOnly,playlistId,duration,extraTags,scopeKey]);
+ },[offset,effectiveFolder,debouncedQuery,format,sort,favoritesOnly,library,tag,historyOnly,playlistId,duration,extraTags,scopeKey,preferences.multilingualSearch]);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;generation.current++;};},[]);
+ useEffect(()=>{
+  const collapse=workspacePage==='tools'&&preferences.collapseToolsPanels;
+  if(collapse){
+   if(toolsRestore.current)return;
+   const current=layoutRef.current;
+   toolsRestore.current={leftCollapsed:current.leftCollapsed,details:current.details,bottomCollapsed:current.bottomCollapsed};
+   setLayout(old=>({...old,leftCollapsed:true,details:false,bottomCollapsed:true}));
+  }else if(toolsRestore.current){
+   const saved=toolsRestore.current;toolsRestore.current=null;
+   setLayout(old=>({...old,...saved}));
+  }
+ },[workspacePage,preferences.collapseToolsPanels,setLayout]);
+ // 启动时把本机保存的输出设备名送回播放器；设备不存在时后端自动回落系统默认。
+ useEffect(()=>{if(!native)return;void invoke('settings_player_set_device',{name:preferences.outputDevice||'default'}).catch(()=>{});},[native,preferences.outputDevice]);
  useEffect(()=>{
   if(!native)return;let stopped=false,timer:number;
   const poll=async()=>{try{await refresh();}catch(e){if(!stopped)setError(String(e));}finally{if(!stopped)timer=window.setTimeout(poll,1000);}};
@@ -160,7 +182,10 @@ function Catalog(){
   const origin=dragOrigin.current;if(!(event.buttons&1)){dragOrigin.current=null;return;}
   if(!origin||origin.id!==asset.id||origin.pointer!==event.pointerId||Math.hypot(event.clientX-origin.x,event.clientY-origin.y)<6)return;
   dragOrigin.current=null;event.preventDefault();if(!native||dragOutLock.current)return;dragOutLock.current=true;setSelected(asset);setError('');
-  const ids=selection.includes(asset.id)?selection:[asset.id];void invoke<string>('catalog_drag_many',{ids}).then(message=>{if(alive.current)setStatus(message);}).catch(e=>{if(alive.current)setError(String(e));}).finally(()=>{dragOutLock.current=false;});
+  const ids=selection.includes(asset.id)?selection:[asset.id];
+  // 图片#2：拖到 DAW 前停止本软件试听，避免与宿主同时占用输出设备。
+  if(preferences.stopOnDragToDaw)void invoke('player_control',{action:'stop',value:null}).catch(()=>{});
+  void invoke<string>('catalog_drag_many',{ids}).then(message=>{if(alive.current)setStatus(message);}).catch(e=>{if(alive.current)setError(String(e));}).finally(()=>{dragOutLock.current=false;});
  };
  const sortState=safeSort(sort);
  /** 单元格内容：所有列都走同一入口，列设置里勾选/隐藏/排序后立即生效。 */
@@ -174,7 +199,7 @@ function Catalog(){
      <strong>{shortName(asset.name)}</strong>
     </button>;
    }
-   case 'wave':return <MiniWaveform asset={asset} onChoose={chooseExternal}/>;
+   case 'wave':return <MiniWaveform asset={asset} onChoose={chooseExternal} simple={preferences.simpleWaveform}/>;
    case 'category':{
     const values=categoryOf(asset);
     if(!values.length)return <span className="cell-empty">—</span>;
@@ -196,7 +221,7 @@ function Catalog(){
   <header className={`workspace-header ${layout.topCollapsed?'is-collapsed':''}`}>
    <div className="workspace-navigation"><div className="compact-brand"><span>∿</span><strong>SFX TOOLS</strong><small className="app-version" title="当前构建版本，与 EXE 文件属性一致">v{appVersion||'—'}</small></div><nav aria-label="工作台页面">{(['sound','music','tools'] as WorkspacePage[]).map(item=><button key={item} aria-current={workspacePage===item?'page':undefined} onClick={()=>item==='tools'?openTool(null):switchPage(item)}>{pageNames[item]}</button>)}</nav><div className="header-actions"><button onClick={()=>openTool('account')}>账号</button><button onClick={()=>openTool('acoustic')}>检索 / 管理</button><button onClick={()=>setSettingsOpen(true)} title="设置" aria-label="打开设置">⚙<span>设置</span></button><button aria-label={layout.topCollapsed?'展开顶栏':'折叠顶栏'} aria-expanded={!layout.topCollapsed} onClick={()=>toggle('topCollapsed')}>{layout.topCollapsed?'⌄':'⌃'}</button></div></div>
   {(workspacePage==='tools'||libraryToolsOpen)&&<nav className="tool-tabs" aria-label="工具页面">{(workspacePage==='tools'?toolPages:toolPages.filter(tool=>toolArea(tool.id)==='library')).map(tool=><button key={tool.id} aria-current={activeTool===tool.id?'page':undefined} onClick={()=>openTool(tool.id)}><ToolGlyph id={tool.id}/>{tool.label}</button>)}</nav>}
-   {!layout.topCollapsed&&<div className="workspace-commandbar"><button className="add-source" disabled={!native||busy||running} onClick={openImport}>＋ 添加{pageNames[library]==='音乐库'?'音乐':'音效'}</button><label className="source-location"><span>素材位置</span><select disabled={workspacePage==='tools'} aria-label="素材存放位置（原路径筛选）" value={folder??''} onChange={event=>selectFolder(event.target.value||null)}><option value="">全部{pageNames[library]}位置</option>{folders.map(node=><option key={node.path} value={node.path}>{displayPath(node.path)}</option>)}</select></label><div className="top-search"><button className="search-scope" hidden={workspacePage==='tools'} aria-label="切换全局或当前文件夹搜索" aria-pressed={searchScope==='folder'} disabled={!folder} title={folder?'点击切换全局/当前文件夹':'未选择文件夹，搜索当前库全部位置'} onClick={()=>{setSearchScope(value=>value==='global'?'folder':'global');setOffset(0);}}>{searchScope==='folder'&&folder?'当前文件夹':'全局'}</button><span aria-hidden="true">⌕</span><input ref={search} aria-label={workspacePage==='tools'?'查找音频工具':'搜索素材名称、路径和标签'} placeholder={workspacePage==='tools'?'查找工具…':`搜索${pageNames[library]}名称、路径、标签…`} value={workspacePage==='tools'?toolQuery:query} maxLength={1024} onChange={event=>workspacePage==='tools'?setToolQuery(event.target.value):setQuery(event.target.value)}/>{(workspacePage==='tools'?toolQuery:query)?<button aria-label="清除搜索" onClick={()=>workspacePage==='tools'?setToolQuery(''):setQuery('')}>×</button>:<kbd>Ctrl K</kbd>}</div></div>}
+   {!layout.topCollapsed&&<div className="workspace-commandbar"><button className="add-source" disabled={!native||busy||running} onClick={openImport}>＋ 添加{pageNames[library]==='音乐库'?'音乐':'音效'}</button><label className="source-location"><span>素材位置</span><select disabled={workspacePage==='tools'} aria-label="素材存放位置（原路径筛选）" value={folder??''} onChange={event=>selectFolder(event.target.value||null)}><option value="">全部{pageNames[library]}位置</option>{folders.map(node=><option key={node.path} value={node.path}>{displayPath(node.path)}</option>)}</select></label><div className="top-search"><button className="search-scope" hidden={workspacePage==='tools'} aria-label="切换全局或当前文件夹搜索" aria-pressed={searchScope==='folder'} disabled={!folder} title={folder?'点击切换全局/当前文件夹':'未选择文件夹，搜索当前库全部位置'} onClick={()=>{setSearchScope(value=>value==='global'?'folder':'global');setOffset(0);}}>{searchScope==='folder'&&folder?'当前文件夹':'全局'}</button><span aria-hidden="true">⌕</span>{workspacePage!=='tools'&&<button className="search-toggle" aria-pressed={preferences.multilingualSearch} title="跨语言搜索：输一种语言，同时搜中/英/日；公式与分类搜索不受影响" onClick={()=>setPreferences(old=>({...old,multilingualSearch:!old.multilingualSearch}))}>跨语言</button>}<input ref={search} aria-label={workspacePage==='tools'?'查找音频工具':'搜索素材名称、路径和标签'} placeholder={workspacePage==='tools'?'查找工具…':`搜索${pageNames[library]}名称、路径、标签…`} value={workspacePage==='tools'?toolQuery:query} maxLength={1024} onChange={event=>workspacePage==='tools'?setToolQuery(event.target.value):setQuery(event.target.value)}/>{(workspacePage==='tools'?toolQuery:query)?<button aria-label="清除搜索" onClick={()=>workspacePage==='tools'?setToolQuery(''):setQuery('')}>×</button>:<kbd>Ctrl K</kbd>}</div></div>}
   </header>
   {error&&<div className="catalog-error shell-error" role="alert">{error}<button onClick={()=>setError('')} aria-label="关闭错误提示">×</button></div>}
   <div className="workspace">
@@ -234,7 +259,7 @@ function Catalog(){
   {playlistMenu&&<PlaylistPicker x={playlistMenu.x} y={playlistMenu.y} ids={playlistMenu.ids} library={library} playlists={overview.playlists} onClose={()=>setPlaylistMenu(null)} onDone={()=>{treeStamp.current='';void refresh();}} notify={setStatus}/>}
   {sidebarPanel&&<SidebarQuickPanel key={sidebarPanel.kind} panel={sidebarPanel} overview={overview} onClose={()=>setSidebarPanel(null)} onSelect={(kind,id)=>{setSidebarPanel(null);showCollection(kind==='tags'?'tag':'playlist',id);}}/>}
   <CatalogContext target={context} library={library} overview={overview} onClose={()=>setContext(null)} onChanged={contextChanged} notify={setStatus} onSimilar={asset=>{chooseExternal(asset);openTool('acoustic');}} onLayer={(assets,scatter)=>{try{const result=addToLayer(assets,scatter);setStatus(`已添加 ${result.added} 个叠层片段，跳过 ${result.skipped} 个（需可用且时长已知）`);openTool('layer');}catch(e){setError(String(e));}}}/>
-  <Settings open={settingsOpen} onClose={()=>setSettingsOpen(false)} value={preferences} onChange={setPreferences} onResetLayout={()=>setLayout(defaultLayout)} onOpenTool={tool=>{setSettingsOpen(false);openTool(tool);}}/>
+  <Settings open={settingsOpen} onClose={()=>setSettingsOpen(false)} value={preferences} onChange={setPreferences} onResetLayout={()=>setLayout(defaultLayout)} library={library} folder={folder} native={native} onOpenTool={tool=>{setSettingsOpen(false);openTool(tool);}}/>
  </div>;
 }
 createRoot(document.getElementById('root')!).render(<React.StrictMode><Catalog/></React.StrictMode>);

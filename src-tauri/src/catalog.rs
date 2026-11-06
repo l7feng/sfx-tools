@@ -356,7 +356,7 @@ fn folder_nodes_in_library(db:&Path,library:Option<&str>)->Result<Vec<FolderNode
     Ok(nodes.into_values().collect())
 }
 #[derive(Default)]
-struct SearchFilter<'a>{folder:Option<&'a str>,query:Option<&'a str>,format:Option<&'a str>,sort:Option<&'a str>,favorites_only:bool,library:Option<&'a str>,tag:Option<&'a str>,tags:Vec<String>,history_only:bool,playlist_id:Option<&'a str>,min_duration:Option<f64>,max_duration:Option<f64>}
+struct SearchFilter<'a>{folder:Option<&'a str>,query:Option<&'a str>,format:Option<&'a str>,sort:Option<&'a str>,favorites_only:bool,library:Option<&'a str>,tag:Option<&'a str>,tags:Vec<String>,history_only:bool,playlist_id:Option<&'a str>,min_duration:Option<f64>,max_duration:Option<f64>,multilingual:bool}
 fn search_page(db:&Path,offset:usize,limit:usize,filter:SearchFilter<'_>)->Result<CatalogPage,String>{
     use rusqlite::types::Value;
     let query=filter.query.unwrap_or("");
@@ -406,10 +406,18 @@ fn search_page(db:&Path,offset:usize,limit:usize,filter:SearchFilter<'_>)->Resul
         values.push(Value::Text(playlist.to_owned()));let n=values.len();
         conditions.push(format!("EXISTS(SELECT 1 FROM playlist_items pi JOIN playlists p ON p.id=pi.playlist_id WHERE pi.asset_id=a.id AND p.id=?{n}{} )",if let Some(library)=filter.library{format!(" AND p.library='{}'",validate_library(library)?)}else{String::new()}));
     }
-    for word in words{
-        // SQLite内建lower覆盖ASCII拉丁字母，中文保持原字；instr按字面匹配%/_及引号。
-        values.push(Value::Text(word.to_ascii_lowercase()));
-        conditions.push(format!("instr(lower(a.name || ' ' || a.path || ' ' || COALESCE(m.tags_search,'')),?{})>0",values.len()));
+    // 跨语言扩展只作用于普通文本关键词：同一词的候选之间 OR，词与词之间仍是 AND。
+    // 上面的标签/分类/格式/时长/收藏/播放列表等条件各自独立生成，完全不受扩展影响；
+    // 所有候选词依旧走绑定参数，不拼进 SQL 文本。
+    let expanded=if filter.multilingual{crate::multilingual::expand_query(&words)}else{words.iter().map(|word|vec![word.to_ascii_lowercase()]).collect::<Vec<Vec<String>>>()};
+    for variants in expanded{
+        let mut alternatives=Vec::with_capacity(variants.len());
+        for variant in variants{
+            // SQLite内建lower覆盖ASCII拉丁字母，中文保持原字；instr按字面匹配%/_及引号。
+            values.push(Value::Text(variant));
+            alternatives.push(format!("instr(lower(a.name || ' ' || a.path || ' ' || COALESCE(m.tags_search,'')),?{})>0",values.len()));
+        }
+        conditions.push(format!("({})",alternatives.join(" OR ")));
     }
     let predicate=conditions.join(" AND ");
     let from=" FROM assets a LEFT JOIN user_metadata m ON m.asset_id=a.id ";
@@ -576,7 +584,7 @@ pub async fn catalog_get_items(ids:Vec<String>,state:tauri::State<'_,CatalogStat
     }).await.map_err(err)?
 }
 #[tauri::command]
-pub async fn catalog_list(state:tauri::State<'_,CatalogState>,offset:usize,limit:usize,folder:Option<String>,query:Option<String>,format:Option<String>,sort:Option<String>,favorites_only:Option<bool>,library:Option<String>,tag:Option<String>,tags:Option<Vec<String>>,history_only:Option<bool>,playlist_id:Option<String>,min_duration:Option<f64>,max_duration:Option<f64>)->Result<CatalogPage,String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||search_page(&db,offset,limit,SearchFilter{folder:folder.as_deref(),query:query.as_deref(),format:format.as_deref(),sort:sort.as_deref(),favorites_only:favorites_only.unwrap_or(false),library:library.as_deref(),tag:tag.as_deref(),tags:tags.unwrap_or_default(),history_only:history_only.unwrap_or(false),playlist_id:playlist_id.as_deref(),min_duration,max_duration})).await.map_err(err)?}
+pub async fn catalog_list(state:tauri::State<'_,CatalogState>,offset:usize,limit:usize,folder:Option<String>,query:Option<String>,format:Option<String>,sort:Option<String>,favorites_only:Option<bool>,library:Option<String>,tag:Option<String>,tags:Option<Vec<String>>,history_only:Option<bool>,playlist_id:Option<String>,min_duration:Option<f64>,max_duration:Option<f64>,multilingual:Option<bool>)->Result<CatalogPage,String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||search_page(&db,offset,limit,SearchFilter{folder:folder.as_deref(),query:query.as_deref(),format:format.as_deref(),sort:sort.as_deref(),favorites_only:favorites_only.unwrap_or(false),library:library.as_deref(),tag:tag.as_deref(),tags:tags.unwrap_or_default(),history_only:history_only.unwrap_or(false),playlist_id:playlist_id.as_deref(),min_duration,max_duration,multilingual:multilingual.unwrap_or(false)})).await.map_err(err)?}
 #[tauri::command]
 pub async fn catalog_assign_library(ids:Vec<String>,library:String,state:tauri::State<'_,CatalogState>)->Result<u64,String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||assign_library(&db,ids,&library)).await.map_err(err)?}
 #[tauri::command]
@@ -697,6 +705,25 @@ mod tests {
         assert!(search_page(&f.db,0,100,SearchFilter{query:Some(&"汉".repeat(1025)),..Default::default()}).is_err());
         assert!(search_page(&f.db,0,100,SearchFilter{query:Some(&vec!["雨";33].join(" ")),..Default::default()}).is_err());
         assert_eq!(list_page(&f.db,0,100).unwrap().total,3);
+    }
+    #[test]
+    fn multilingual_search_expands_only_text_words(){
+        let f=Fixture::new();let _state=f.state();
+        fs::write(f.audio().join("雨声_OnlyChinese.wav"),wav()).unwrap();
+        fs::write(f.audio().join("thunder_OnlyEnglish.wav"),wav()).unwrap();
+        direct(&f,"search",&AtomicBool::new(false));
+        // 关闭扩展时按字面匹配：库里没有含 rain 的名称。
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("rain"),..Default::default()}).unwrap().total,0);
+        // 开启后英文 rain 扩展出「雨声」，命中纯中文文件名。
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("rain"),multilingual:true,..Default::default()}).unwrap().total,1);
+        // 中文「雷」扩展出 thunder，命中纯英文文件名。
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("雷"),multilingual:true,..Default::default()}).unwrap().total,1);
+        // 词与词之间仍是 AND：两个文件各只满足一个词。
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("rain 雷"),multilingual:true,..Default::default()}).unwrap().total,0);
+        // 格式/分类筛选不受扩展影响。
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("rain"),multilingual:true,format:Some("MP3"),..Default::default()}).unwrap().total,0);
+        // 注入串仍按字面绑定，不放大结果。
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("' OR 1=1 --"),multilingual:true,..Default::default()}).unwrap().total,0);
     }
     #[test]
     fn search_paginates_complete_results_and_orders_unknown_duration_last(){

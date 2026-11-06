@@ -42,6 +42,15 @@ test('failed decode is retryable, LRU bounded and metadata changes invalidate ca
  await h.get(asset('b'));await h.get(asset('a','2'));assert.deepEqual(calls,['a','a','a','b','a']);
  assert.notEqual(waveformKey(asset('a','1')),waveformKey(asset('a','2')));
 });
+test('simple mini waveform is a separate request and cache entry from the full waveform',async()=>{
+ const calls=[];
+ const scheduler=createWaveformScheduler(async(id,simple)=>{calls.push([id,simple]);return wave;});
+ await scheduler.get(asset('a'));
+ await scheduler.get(asset('a')); // 完整模式命中缓存
+ await scheduler.get(asset('a'),0,undefined,{simple:true});
+ await scheduler.get(asset('a'),0,undefined,{simple:true}); // 简化模式命中自己的缓存
+ assert.deepEqual(calls,[['a',false],['a',true]]);
+});
 test('continuous envelope uses real amplitudes with no synthetic floor; pointer maps only analyzed duration',()=>{
  const path=envelopePath([0,.5,1]);
  assert.match(path,/M0\.000,50\.000 L500\.000,26\.000 L1000\.000,2\.000/);

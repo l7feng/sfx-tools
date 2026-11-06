@@ -26,7 +26,8 @@ export function isMissingSourceError(error:unknown){
  const message=String(error instanceof Error?error.message:error??'');
  return /素材不可访问|找不到指定|路径不存在|os error (2|3)\b|not found|文件缺失/i.test(message);
 }
-export function MiniWaveform({asset,onChoose}:{asset:CatalogAsset;onChoose?:(asset:CatalogAsset)=>void}){
+/** `simple`：整条音频压成 512 峰的单条单色包络（不分声道、峰值更少），列表渲染更快；内容仍是全长。 */
+export function MiniWaveform({asset,onChoose,simple=false}:{asset:CatalogAsset;onChoose?:(asset:CatalogAsset)=>void;simple?:boolean}){
  const root=useRef<HTMLDivElement>(null),live=useRef(true),previewBusy=useRef(false),revision=useRef(0);
  const key=waveformKey(asset);
  const [visible,setVisible]=useState(false),[waveState,setWaveState]=useState<{key:string;data:WaveformData}|null>(null),[cursor,setCursor]=useState<number|null>(null),[keyboard,setKeyboard]=useState(0),[error,setError]=useState(''),[busy,setBusy]=useState(false),[retry,setRetry]=useState(0);
@@ -42,9 +43,9 @@ export function MiniWaveform({asset,onChoose}:{asset:CatalogAsset;onChoose?:(ass
   if(!visible||!isTauri()||asset.status!=='ready')return;
   const controller=new AbortController();let done=false;
   setError('');
-  void getWaveform(asset,0,controller.signal).then(data=>{if(!done)setWaveState({key,data});},e=>{if(!done)setError(String(e));});
+  void getWaveform(asset,0,controller.signal,{simple}).then(data=>{if(!done)setWaveState({key,data});},e=>{if(!done)setError(String(e));});
   return()=>{done=true;controller.abort();};
- },[key,visible,retry,asset.status]);
+ },[key,visible,retry,asset.status,simple]);
  const duration=wave?.analyzed_duration??0;
  async function preview(fraction:number){
   if(!wave||!duration||previewBusy.current||!isTauri())return;
@@ -54,7 +55,7 @@ export function MiniWaveform({asset,onChoose}:{asset:CatalogAsset;onChoose?:(ass
   finally{previewBusy.current=false;if(live.current)setBusy(false);}
  }
  const position=waveformPosition(cursor??keyboard,duration);
- return <div ref={root} className={`mini-waveform${busy?' is-busy':''}`} role="button" tabIndex={0} aria-label={`${asset.name} 波形试听，方向键定位，Enter 试听`} aria-disabled={!wave||busy} title={error||`鼠标点击试听 · ${wave?.truncated?'仅前段 · ':''}${label(position)}`}
+ return <div ref={root} className={`mini-waveform${busy?' is-busy':''}${simple?' is-simple':''}`} role="button" tabIndex={0} aria-label={`${asset.name} 波形试听，方向键定位，Enter 试听`} aria-disabled={!wave||busy} title={error||`鼠标点击试听 · ${wave?.truncated?'仅前段 · ':''}${label(position)}`}
   onDragStart={e=>{e.preventDefault();e.stopPropagation();}} draggable={false}
   onPointerDown={e=>{e.preventDefault();e.stopPropagation();e.currentTarget.focus({preventScroll:true});}} onPointerUp={e=>e.stopPropagation()} onDoubleClick={e=>e.stopPropagation()}
   onPointerMove={e=>{e.stopPropagation();const rect=e.currentTarget.getBoundingClientRect();setCursor(fractionAt(e.clientX,rect.left,rect.width));}}
@@ -62,6 +63,6 @@ export function MiniWaveform({asset,onChoose}:{asset:CatalogAsset;onChoose?:(ass
   onClick={e=>{e.stopPropagation();if(error&&!wave){if(!isMissingSourceError(error)){setRetry(value=>value+1);setVisible(true);}return;}const rect=e.currentTarget.getBoundingClientRect();const fraction=e.detail===0?keyboard:fractionAt(e.clientX,rect.left,rect.width);setKeyboard(fraction);void preview(fraction);}}
   onFocus={()=>setVisible(true)}
   onKeyDown={e=>{e.stopPropagation();if(['ArrowLeft','ArrowRight','Home','End','Enter',' '].includes(e.key))e.preventDefault();if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key))setCursor(null);if(e.key==='ArrowLeft')setKeyboard(v=>Math.max(0,v-.02));else if(e.key==='ArrowRight')setKeyboard(v=>Math.min(1,v+.02));else if(e.key==='Home')setKeyboard(0);else if(e.key==='End')setKeyboard(1);else if(e.key==='Enter'&&!e.repeat){if(error&&!wave){if(!isMissingSourceError(error))setRetry(v=>v+1);}else void preview(keyboard);}}}>
-  {wave?<><Envelope peaks={wave.peaks} lanes={channelLanes(wave)} cursor={cursor??keyboard}/><span className="mini-waveform-time">{label(position)}{wave.truncated?' · 前段':''}</span></>:<span className={`mini-waveform-message${error&&isMissingSourceError(error)?' is-missing':''}`}>{error?(isMissingSourceError(error)?'文件缺失':'波形暂不可用 · 点击重试'):asset.status!=='ready'?'素材不可用':visible?'读取峰值…':'波形'}</span>}
+  {wave?<><Envelope peaks={wave.peaks} lanes={simple?null:channelLanes(wave)} cursor={cursor??keyboard}/><span className="mini-waveform-time">{label(position)}{wave.truncated?' · 前段':''}</span></>:<span className={`mini-waveform-message${error&&isMissingSourceError(error)?' is-missing':''}`}>{error?(isMissingSourceError(error)?'文件缺失':'波形暂不可用 · 点击重试'):asset.status!=='ready'?'素材不可用':visible?'读取峰值…':'波形'}</span>}
  </div>;
 }

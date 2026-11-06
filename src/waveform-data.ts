@@ -1,8 +1,9 @@
 export type WaveformAsset={id:string;size:number;modified:string};
 export type WaveformData={peaks:number[];duration:number|null;analyzed_duration:number;truncated:boolean;channels?:number;channel_peaks?:number[][]};
-type FetchWave=(id:string)=>Promise<WaveformData>;
+type FetchWave=(id:string,simple:boolean)=>Promise<WaveformData>;
 type Waiter={resolve:(wave:WaveformData)=>void;reject:(reason:unknown)=>void;signal?:AbortSignal;abort:()=>void};
-type Job={key:string;id:string;priority:number;waiters:Set<Waiter>};
+type Job={key:string;id:string;simple:boolean;priority:number;waiters:Set<Waiter>};
+export type WaveformOptions={simple?:boolean};
 export const waveformKey=(asset:WaveformAsset)=>JSON.stringify([asset.id,asset.size,asset.modified]);
 const abortError=()=>new Error('波形请求已取消');
 
@@ -19,14 +20,16 @@ export function createWaveformScheduler(fetchWave:FetchWave,maxQueue=64,maxCache
   queue=queue.filter(job=>job.waiters.size>0);
   queue.sort((a,b)=>b.priority-a.priority);
   const job=queue.shift();if(!job)return;active=job;
-  void Promise.resolve().then(()=>fetchWave(job.id)).then(wave=>{
+  void Promise.resolve().then(()=>fetchWave(job.id,job.simple)).then(wave=>{
    cache.set(job.key,wave);while(cache.size>maxCache)cache.delete(cache.keys().next().value!);
    settle(job,wave);
   },error=>settle(job,null,error)).finally(()=>{active=null;pump();});
  }
- function get(asset:WaveformAsset,priority=0,signal?:AbortSignal):Promise<WaveformData>{
+ function get(asset:WaveformAsset,priority=0,signal?:AbortSignal,options?:WaveformOptions):Promise<WaveformData>{
   if(signal?.aborted)return Promise.reject(abortError());
-  const key=waveformKey(asset),hit=cache.get(key);
+  // 简化/完整波形是两份不同的分析结果与两份磁盘缓存，绝不能共用同一个内存缓存键。
+  const simple=options?.simple===true;
+  const key=`${waveformKey(asset)}|${simple?'mini':'full'}`,hit=cache.get(key);
   if(hit){cache.delete(key);cache.set(key,hit);return Promise.resolve(hit);}
   let job=jobs.get(key);
   if(!job){
@@ -35,7 +38,7 @@ export function createWaveformScheduler(fetchWave:FetchWave,maxQueue=64,maxCache
     if(priority<=lowest.priority)return Promise.reject(new Error('波形队列繁忙，请稍后重试'));
     queue=queue.filter(item=>item!==lowest);settle(lowest,null,new Error('波形请求已让位于当前选中素材，请重试'));
    }
-   job={key,id:asset.id,priority,waiters:new Set()};jobs.set(key,job);queue.push(job);
+   job={key,id:asset.id,simple,priority,waiters:new Set()};jobs.set(key,job);queue.push(job);
   }else job.priority=Math.max(job.priority,priority);
   const current=job;
   const promise=new Promise<WaveformData>((resolve,reject)=>{
@@ -50,11 +53,11 @@ export function createWaveformScheduler(fetchWave:FetchWave,maxQueue=64,maxCache
  return {get};
 }
 
-const shared=createWaveformScheduler(async id=>{
+const shared=createWaveformScheduler(async(id,simple)=>{
  const {invoke}=await import('@tauri-apps/api/core');
- return invoke<WaveformData>('player_waveform',{id});
+ return invoke<WaveformData>('player_waveform',{id,simple});
 });
-export type WaveformGetter=(asset:WaveformAsset,priority?:number,signal?:AbortSignal)=>Promise<WaveformData>;
+export type WaveformGetter=(asset:WaveformAsset,priority?:number,signal?:AbortSignal,options?:WaveformOptions)=>Promise<WaveformData>;
 const RETRY_DELAYS=[120,240,400,600];
 const TRANSIENT=[/繁忙/,/让位/,/稍后重试/,/分析锁不可用/];
 /** 只有队列竞争类瞬时错误才重试；解码失败、文件损坏等永久错误必须立即上抛。 */
@@ -72,11 +75,11 @@ function delay(ms:number,signal?:AbortSignal){
 }
 /** 队列满或高优先级让位不再直接落到界面成"波形暂不可用"，先有限次退避重试。 */
 export function withWaveformRetry(base:WaveformGetter,delays:number[]=RETRY_DELAYS):WaveformGetter{
- return async(asset,priority=0,signal)=>{
+ return async(asset,priority=0,signal,options)=>{
   let last:unknown=new Error('波形暂不可用');
   for(let attempt=0;attempt<=delays.length;attempt++){
    if(signal?.aborted)throw new Error('波形请求已取消');
-   try{return await base(asset,priority,signal);}
+   try{return await base(asset,priority,signal,options);}
    catch(error){
     if(signal?.aborted)throw new Error('波形请求已取消');
     if(!isTransientWaveformError(error))throw error;

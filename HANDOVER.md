@@ -1,6 +1,6 @@
 # SFX Tools 交接文档（供新 Agent 接手）
 
-> 生成：2026-11-05，最后更新 2026-11-06。当前版本 **0.1.19**（SFX Tools；Cargo/npm 包名 `sfx-tools`；debug/no-bundle，已构建并提交推送）。
+> 生成：2026-11-05，最后更新 2026-11-06。当前版本 **0.1.20**（SFX Tools；Cargo/npm 包名 `sfx-tools`；debug/no-bundle，已构建）。0.1.20 的完整交付记录见仓库 `handoff.md` 与知识库 `Documentation.md`。
 > 本文件自包含，新 agent 无需依赖历史对话或 WorkBuddy Skill 机制即可接手。
 
 ## 1. 项目定位与关键路径
@@ -15,7 +15,7 @@
 | 元数据适配 | 知识库 `26-BWF与iXML元数据适配.md` |
 | 评测方法 | 知识库 `27-中文相关性评测方法.md`；模板 `tests/cn-relevance-eval.template.json` |
 | 活待办看板 | `D:/1-个人知识库_Vault/6-资产-R/01-待办事项/待办清单.md` |
-| 交付 EXE | `src-tauri/target/debug/sfx-tools.exe`（0.1.18，25010176 字节，2026/11/06 10:43）；桌面 `SFX Tools.lnk` 直接指向它，重建即生效 |
+| 交付 EXE | `src-tauri/target/debug/sfx-tools.exe`（0.1.20，25324544 字节，2026/11/06 13:01）；桌面 `SFX Tools.lnk` 直接指向它，重建即生效 |
 | 交接 Skill（可选） | `C:/Users/Administrator/.workbuddy-ai/skills/sound-workbench-handover/`（SKILL.md + references/handover-state.md）；zip 同目录 |
 
 技术栈：Tauri 2 + React/TypeScript + Rust + SQLite/FTS5 + Python ONNX Runtime 桥（独立 CPU 推理）。
@@ -24,7 +24,7 @@
 
 1. **唯一当前状态入口是知识库 `Documentation.md`**；不得另建第二份当前进度。每次交付后更新它。
 2. 四文件规则：`Prompt.md` / `Plan.md` / `Implement.md` / `Documentation.md` 分工明确。
-3. 构建用 `verify.ps1 -Action build`：**debug / --no-bundle，不自动打安装包**。更新前按授权后台结束本项目 `sound-workbench.exe`（Implement.md 授权）。
+3. 构建用 `verify.ps1 -Action build`：**debug / --no-bundle，不自动打安装包**。更新前按授权后台结束本项目 `sfx-tools.exe`（Implement.md 授权；0.1.13 起已更名，`sound-workbench.exe` 是废弃旧名）。
 4. **语义边界不可伪造**：文件齐备 / ONNX 张量自检 / `encode_text` / `encode_audio` 跑通，都不等于「音频语义检索可用」，也不等于「中文相关性评测通过」。评测工具已就位但**指标仍是零产出**；真实万条是正式发布闸门；十万条专项后置。
 5. 只调用本机独立 FFmpeg，不捆绑分发；不操作用户素材库内容（只读；元数据写回仅在用户点击保存时发生）。
 6. 提交必带身份：仓库与全局都没有配 `user.name/user.email`，`git commit` 需 `-c user.name=… -c user.email=…`；推送走代理 `-c http.proxy=http://127.0.0.1:7897`。
@@ -69,7 +69,20 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 - 上游 `laion/clap-htsat-unfused` 为 Apache-2.0；`Xenova` 仓库**无 LICENSE、无 license 字段**，再分发需我们自行补齐声明（见 25 号审计「路线甲」）。
 - 长音频确定性取开头 480000 samples（10s），未与官方 `ClapFeatureExtractor` 逐帧对照。
 
-## 5. 0.1.19 已交付（本批）
+## 5. 0.1.20 已交付（本批）
+
+按人类六张参考图与本批文字需求落地，中途人类追加裁决「波形显示全部，不能只显示片段」。
+
+- **全长波形（最高优先裁决）**：撤销本批早期「简化小波形只解码前 12 秒」，并取消历史「列表最多前 60 秒」截断。`player.rs` 按文件头时长算读取上限、分桶数超 2×目标峰值时两两归并并翻倍桶宽（内存恒定、末尾瞬态不丢）；`WAVE_CACHE_VERSION` 5→6 使旧片段缓存整批失效；点击试听定位上界改按真实时长。简化规格仍是**整条音频**，只是 512 峰／单条单色包络／不分声道；完整规格 4096 峰并保留分轨。单线单色只省渲染，提速靠缓存复用、流式降采样与 `WAVE_DECODE_LOCK` 串行解码。
+- **三个事实性回答**：小窗口只画一条可行但只省渲染；深浅叠加统一成一个颜色不加快解码；波形**确实占磁盘**（本机实测 323 个文件／16MB，单条 ≤128KB、总上限 16MB／256 条，设置页可查看／改路径／关闭／清空）。
+- **工具页折叠**：进音频工具自动收起左素材栏、右详情栏、底部播放器，离开时恢复；偏好可关。
+- **跨语言搜索**：`multilingual.rs` 本地中／英／日静态词表，词内 OR 词间 AND，候选全走绑定参数；公式／标签／分类／格式／时长／收藏／播放列表筛选不受影响。搜索条有开关，设置里可关。
+- **设置页**：分类 5→7。新增输出设备下拉（`cpal = "=0.15.3"`，按名称选设备、拔掉回落系统默认）、三个试听行为开关、图 #4「缓存波形图」（开关／自定义路径／分组统计／清空／预生成进度与取消）、图 #5 临时文件清理、图 #6 数据备份（独立目录永不覆盖，`VACUUM INTO` + SHA256 + `integrity_check` + manifest + 设置快照）。`settings_ops.rs` 统一治理缓存根，清理／备份只碰白名单目录。
+- **验证**：`cargo check --all-targets` 通过；全量 `cargo test --bin sfx-tools` 172 通过 / 1 失败 / 6 忽略（唯一失败为既有时间敏感用例，用 0.1.19 HEAD 版对照重跑同样超时，非本批回归）；`player::tests` 22/22；`tsc --noEmit` 通过、前端波形 10/10、debug 构建通过。EXE 0.1.20，25,324,544 字节，2026/11/06 13:01。CDP 实测：库中 3534 秒素材的简化／完整波形都 `analyzed_duration=3534`、`truncated=false`；跨语言 `rain` 2→4 条、`雨音` 0→4 条；输出设备枚举出 UR22C 等真实设备；数据备份实产出 2,150,400 字节一致性快照 `integrity=ok`。暗／亮两色 12 张截图核对四个设置面板与工具页折叠／恢复，无裁切。
+
+未收口：长音频首次解码比旧的截断方案慢（靠缓存与预生成摊薄）；文件头时长缺失的异常输入仍退回 2400 万采样安全上限并标「前段」；旧版片段缓存成为孤儿文件，可在设置页一次清空；「按频谱着色」下线、图标定版、安装包仍待拍板。
+
+### 0.1.19 列表列重构与音乐库（配乐）窗口
 
 按人类三条反馈落地：列设置删「状态」、参考图 1 重排列表并压缩行高、参考图 2 优化配乐窗口。裁决为「列结构＋行高紧凑」与「筛选维度条＋列＋音乐详情组」。
 
@@ -140,15 +153,15 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 
 上一批 0.1.11（同样已在仓库）：CLAP 双塔语义检索（`semantic_vector.rs`）、波形「暂不可用」修复（`player.rs` Mutex 排队 + `waveform-data.ts` 退避重试）、模型下载队列与桥契约（`model_download.rs` / `audio_text.rs` / `audio_text_bridge.py`）。
 
-## 6. 验证结果（0.1.12）
+## 6. 验证结果（0.1.20）
 
 | 项 | 结果 |
 |---|---|
-| Rust | 全量 158 项：**152 通过 / 6 忽略 / 0 失败**。唯一失败 `catalog::tests::real_worker_cancel_resume_and_single_task_guard` 为**既有偶发超时**（本轮另一轮全量跑通过，0.1.11 记录同样漂移），与本次无关。`bwf_metadata` 10 项、`semantic_eval` 6 项全绿 |
-| 真实文件 | `real_ffmpeg_bwf_roundtrip`（`#[ignore]`，已实跑）：FFmpeg 生成带 bext 的 BWF → 写回 iXML → 音频 data chunk **逐字节不变**，bext 与 iXML 并存 |
-| 前端 | `npm run build`（tsc + Vite）通过 |
-| EXE | ProductVersion/FileVersion **0.1.13**，ProductName/CompanyName = SFX Tools，24943616 字节，写入 2026/11/05 15:51:18；未生成安装包 |
-| Git | 0.1.10/0.1.11/0.1.12 均已提交并推送，工作区 clean |
+| Rust | `cargo check --all-targets --offline` 通过；全量 `cargo test --bin sfx-tools --offline` **172 通过 / 1 失败 / 6 忽略**；`player::tests` 22/22。唯一失败 `catalog::tests::real_worker_cancel_resume_and_single_task_guard` 是既有时间敏感／竞态用例：单独重跑与用 0.1.19 HEAD 版 `catalog.rs` 对照重跑都超时，0.1.18 验收记录也标过「既有偶发」，**不是本批回归，不要为它改产品代码** |
+| 前端 | `npx tsc --noEmit` 通过；`node --test tests/waveform-data.test.mjs` 10/10 |
+| CDP 端到端 | `app_version`=0.1.20；首屏 100 个小波形全部 `is-simple`、无「前段」标签；库中 3534 秒素材的简化／完整波形都 `analyzed_duration=3534`、`truncated=false`（512／4096 峰）；跨语言 `rain` 2→4、`雨` 2→4、`雨音` 0→4，`thunder`／`雷` 0→0（不伪造命中）；`settings_output_devices` 枚举出系统默认与 UR22C 等真实设备；`settings_cache_info` 返回 root／enabled／四组统计；`settings_backup_create` 实产出 `backup-20261106-130448-25919e3f`，catalog 快照 2,150,400 字节、`integrity=ok`、含 manifest。暗／亮两色 12 张截图在 `D:/My-Temporary/sw-debug/v20-*.png` |
+| EXE | ProductVersion/FileVersion **0.1.20**，ProductName = SFX Tools，25324544 字节，写入 2026/11/06 13:01:14；未生成安装包 |
+| 历史真实文件 | 0.1.12 批次 `real_ffmpeg_bwf_roundtrip`（`#[ignore]`，已实跑）：FFmpeg 生成带 bext 的 BWF → 写回 iXML → 音频 data chunk 逐字节不变，bext 与 iXML 并存 |
 
 ## 7. 未完成 / 风险（勿当已完成）
 
@@ -156,26 +169,34 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 2. **BWF 面板未做真实 GUI 手测**；只测了本机 FFmpeg 生成的 BWF，Soundminer / Basehead / Pro Tools 导出文件未逐个对照；`axml`/`chna`/`cart`/`ds64` 只透传不解析。
 3. **向量索引真实万条**耗时/失败隔离/断点续建未实测；真实万条是发布闸门，十万条专项后置。
 4. **许可**：`THIRD-PARTY-NOTICES.md` 为初版，多个组件缺许可全文；`bundle.active` 仍为 false；ONNX 转换产物的声明义务需我们补齐。
-5. 真实 GUI/听审、PT 真实工程导入、生产支付、S1.4 安装升级实测仍未完成；AAF/OMF 解析与 PT Spotting 未开始。
-6. 更名只覆盖工程与应用界面；知识库历史文档里的旧名按存证保留。波形「已修复」目前只是代码与测试层面，**未做真实 GUI 手测**（人类安排后测）。
+5. 真实 GUI/听审、PT 真实工程导入、生产支付、S1.4 安装升级实测仍未完成；AAF/OMF 真正解析与 PT Spotting 未开始（目前只有只读预览与状态文案，不提前伪造工程写入）。
+6. 0.1.20 新增未收口：长音频首次解码比旧的截断方案慢（靠缓存与预生成摊薄，未做 WAV PCM 直读快路径）；文件头时长缺失的异常输入仍退回 2400 万采样安全上限并标「前段」；`WAVE_CACHE_VERSION` 5→6 后旧片段缓存成为孤儿文件，可在设置页一次清空；6 张参考图只作视觉对照，未逐像素复刻。
+7. 待人类拍板：「按频谱着色」是否下线、列表小波形是否加高到 44–48px、三版候选图标定版、是否生成安装包。
+8. 更名只覆盖工程与应用界面；知识库历史文档里的旧名按存证保留。
 
-## 8. 续作顺序（0.1.12 之后）
+## 8. 续作顺序（0.1.20 之后）
 
-1. 标注 `cn-relevance-eval` 评测集并跑出第一组 hit@k / MRR，按「模型 revision + 索引条数 + 评测集版本 + 日期」记入 `Documentation.md`。
-2. 在授权素材库上跑真实万条索引，记录耗时与失败分布（不伪造结果）。
-3. BWF 面板真实 GUI 手测，并用 Soundminer/PT 导出的真实文件对照读写。
-4. 制作适配器续项：AAF/OMF 解析、PT Spotting、线索表/许可证字段导出（24 号复盘中期项，iXML/BWAV 已完成）。
-5. 许可收尾：补齐 `THIRD-PARTY-NOTICES.md` 全文、模型落盘补 `LICENSE`/`NOTICE`/`MODIFICATIONS.md`、评估从 laion 原始权重自行转换（路线乙）。
-6. 每次交付后固定流程：`verify.ps1 -Action test`（除既有 flaky）→ `verify.ps1 -Action build` → 升版本号 → 同步 `Documentation.md`/`README.md` → 更新本文件与交接 Skill → 提交推送。
+按 24 号复盘（`24-市面音效库工具对标复盘与改进路线.md`）的中期／战略项，确定性从高到低：
 
-## 9. 当前 git 状态
+1. **AAF/OMF 真正解析与 PT Spotting** —— 已有只读预览与状态文案，按既定「最后提供测试工程」顺序，不提前伪造工程写入。
+2. **感知近重复检测升级 / UCS 结构化管理 / 线索表（Cue Sheet）导出 + 许可证字段** —— 复用现有标签与列模型。
+3. **中文相关性评测** —— 0.1.12 工具已交付（hit@k/MRR、评测集模板、面板入口），缺的是人工标注评测集，指标仍为零产出，不得宣称「已达标」。
+4. 真实万条索引实测、BWF 面板真实 GUI 手测、许可全文收尾（历史顺延项，见第 7 节）。
+5. 每次交付后固定流程：`verify.ps1 -Action test`（除既有 flaky）→ `verify.ps1 -Action build` → 升版本号四处 → 同步 `Documentation.md`/`Plan.md`/`README.md` → 更新本文件、`handoff.md` 与交接 Skill → 提交推送。
 
-工作区 clean，无未提交改动。最近提交：
+## 9. 当前 git 状态（接手时请重新核验，勿以本文缓存为准）
 
-| commit | 内容 |
-|---|---|
-| `d3b5537` | 0.1.11：接入 CLAP 音频语义检索并修复波形不可用（含 0.1.10 模型下载队列） |
-| `419f58a` | 0.1.12：BWF/iXML 元数据读写与中文相关性评测工具 |
-| 0.1.13 | 更名 SFX Tools、EXE 版本信息补全 |
+本文件不缓存 git 状态；每次接手第一步务必自己跑：
 
-> 接手第一步建议：先读知识库 `Documentation.md` 最新章节与 `Plan.md` 的 2026-11-05 节，再跑 `verify.ps1 -Action test` 确认环境，然后按第 8 节推进。
+```bash
+git -C 'D:/Ai-Files/Repos/GitHub/sound-workbench' status --short
+git -C 'D:/Ai-Files/Repos/GitHub/sound-workbench' log --oneline -5
+git -C 'D:/Ai-Files/Repos/GitHub/sound-workbench' log origin/main --oneline -3
+```
+
+- 0.1.20 基线提交是 `90d60bd`（0.1.19 列表列重构与音乐库筛选维度条），0.1.19 及更早批次已提交并推送 `origin/main`。
+- 0.1.20 涉及 21 个已跟踪文件与 5 个新文件（`src-tauri/src/multilingual.rs`、`src-tauri/src/settings_ops.rs`、`src/settings-client.ts`、`src/settings-panels.tsx`、`handoff.md`）。
+- `src-tauri/icons/icon.ico` / `icon.png` 有来源未确认的候选图标改动：按 0.1.16 起约定**继续留在工作区、不纳入任何批次提交**，等人类确认其来源与去留。
+- 提交需带身份 `-c user.name=… -c user.email=…`（仓库与全局都未配置），推送走代理 `-c http.proxy=http://127.0.0.1:7897`；**不自动提交知识库仓**（存在并行会话未提交中间态）。
+
+> 接手第一步建议：先读知识库 `Documentation.md` 最新章节与 `Plan.md` 的 2026-11-06 节，再按本文件第 9 节核验 git，然后按第 8 节推进。

@@ -3,7 +3,6 @@ use crate::catalog::CatalogState;
 use rodio::{OutputStream, OutputStreamHandle, Sink, Source};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::Manager;
 use std::{
     fs::{self, File}, io::Read, path::{Path, PathBuf},
     sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}, mpsc::{self, Receiver, SyncSender, TrySendError}},
@@ -11,9 +10,18 @@ use std::{
 };
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(8);
-const WAVE_SECONDS: u64 = 60;
+/// 波形一律覆盖整条音频，不再按秒数截断。这里只保留「文件头读不到时长」时的安全上限，
+/// 防止无限合成源把分析拖死（约 4.5 分钟 @44.1kHz 双声道）。
 const WAVE_MAX_SAMPLES: u64 = 24_000_000;
+/// 绝对样本上限（约 6 小时 @44.1kHz 双声道），仅防御文件头时长损坏的异常输入。
+const WAVE_ABSOLUTE_MAX_SAMPLES: u64 = 2_000_000_000;
 const WAVE_MAX_PEAKS: usize = 4096;
+// 列表小波形「简化模式」：整条音频压缩成一条 512 峰单色包络，不做声道分轨。
+// 提速来自单条包络、恒定内存的流式降采样与缓存复用，绝不靠只画前一段。
+const WAVE_MINI_PEAKS: usize = 512;
+const WAVE_MINI_BUCKET_DIVISOR: u64 = 2_000;
+/// 波形解码全局串行。列表读取与设置页预生成共用，避免同时开两个解码器。
+static WAVE_DECODE_LOCK: Mutex<()> = Mutex::new(());
 
 #[cfg(test)]
 #[path = "wave_acceptance.rs"]
@@ -35,7 +43,8 @@ pub struct PlayerState { inner:Arc<Inner> }
 struct Inner {
     sender:Mutex<Option<SyncSender<Request>>>,
     snapshot:Arc<Mutex<PlayerSnapshot>>,
-    wave_lock:Arc<Mutex<()>>,
+    /// 用户选择的输出设备名；空串或 "default" 表示系统默认。
+    device:Arc<Mutex<String>>,
 }
 enum Command { Load { id:String, path:PathBuf, position:f64 }, Control { action:String, value:Option<f64> } }
 struct Request {
@@ -46,8 +55,13 @@ impl PlayerState {
     pub fn new() -> Self {
         Self { inner:Arc::new(Inner {
             sender:Mutex::new(None), snapshot:Arc::new(Mutex::new(PlayerSnapshot::default())),
-            wave_lock:Arc::new(Mutex::new(())),
+            device:Arc::new(Mutex::new(String::new())),
         }) }
+    }
+    /// 界面切换输出设备；设备不存在或已拔出时 start_audio 自动回落系统默认。
+    pub fn set_output_device(&self,name:String){
+        let value=if name.trim().is_empty()||name=="default"{String::new()}else{name};
+        if let Ok(mut slot)=self.inner.device.lock(){*slot=value;}
     }
     pub(crate) fn play_derived(&self,id:String,path:PathBuf)->Result<PlayerSnapshot,String>{self.request(Command::Load{id,path,position:0.0})}
     fn snapshot(&self) -> Result<PlayerSnapshot,String> {
@@ -59,10 +73,11 @@ impl PlayerState {
             if slot.is_none() {
                 let (tx,rx)=mpsc::sync_channel(1);
                 let snapshot=self.inner.snapshot.clone();
+                let device=self.inner.device.clone();
                 std::thread::Builder::new().name("sound-workbench-player".into())
                     .spawn(move||{
                         let recovery=snapshot.clone();
-                        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(||worker(rx,snapshot))).is_err(){
+                        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(||worker(rx,snapshot,device))).is_err(){
                             if let Ok(mut state)=recovery.lock(){fail(&mut state,"音频线程异常退出，已释放播放资源；请重新发起播放。".into());}
                         }
                     }).map_err(|e|format!("无法启动音频线程：{e}"))?;
@@ -201,19 +216,30 @@ fn prepared_source(path:&Path,position:f64)->Result<(PlaybackSource,Option<f64>)
     if position>0.0 {
         if !position.is_finite() || position<0.0 || duration.is_some_and(|seconds|position>seconds){return Err("试听位置超出音频范围".into());}
         source.try_seek(Duration::from_secs_f64(position)).map_err(|e|format!("当前音频无法定位试听：{e}"))?;
-    } else {validate_preview(position,WAVE_SECONDS as f64)?;}
+    } else {validate_preview(position,duration.unwrap_or(f64::MAX))?;}
     Ok((source,duration))
 }
+/// 波形现在覆盖全长，试听位置的边界由调用方按真实文件时长给出，不再限制在前 60 秒。
 fn validate_preview(position:f64,bound:f64)->Result<(),String>{
-    if !position.is_finite() || position<0.0 || position>bound.min(WAVE_SECONDS as f64){
-        return Err("试听位置超出已分析的前段音频范围".into());
+    if !position.is_finite() || position<0.0 || position>bound{
+        return Err("试听位置超出音频范围".into());
     }
     Ok(())
 }
-fn start_audio(path:&Path,volume:f32,position:f64,cancelled:&AtomicBool)->Result<(Playing,Option<f64>),String> {
+/// 优先打开用户指定的声卡；找不到或打开失败（例如设备被拔掉）时静默回落系统默认。
+fn open_output(device:&Arc<Mutex<String>>)->Result<(OutputStream,OutputStreamHandle),String>{
+    let name=device.lock().map(|value|value.clone()).unwrap_or_default();
+    if !name.is_empty(){
+        if let Some(found)=crate::settings_ops::find_output_device(&name){
+            if let Ok(pair)=OutputStream::try_from_device(&found){return Ok(pair);}
+        }
+    }
+    OutputStream::try_default().map_err(|e|format!("无法打开音频输出：{e}"))
+}
+fn start_audio(path:&Path,volume:f32,position:f64,cancelled:&AtomicBool,device:&Arc<Mutex<String>>)->Result<(Playing,Option<f64>),String> {
     let (source,duration)=prepared_source(path,position)?;
     if cancelled.load(Ordering::Acquire){return Err("播放准备已超时，本次未开始发声。".into());}
-    let (stream,handle)=OutputStream::try_default().map_err(|e|format!("无法打开默认音频输出：{e}"))?;
+    let (stream,handle)=open_output(device)?;
     let sink=Sink::try_new(&handle).map_err(|e|format!("创建播放通路失败：{e}"))?;
     sink.pause();sink.set_volume(volume);sink.append(source);
     if cancelled.load(Ordering::Acquire){return Err("播放准备已超时，本次未开始发声。".into());}
@@ -242,7 +268,7 @@ fn validate_control(action:&str,value:Option<f64>,duration:Option<f64>)->Result<
         _=>Err("未知播放控制操作".into()),
     }
 }
-fn worker(receiver:Receiver<Request>,shared:Arc<Mutex<PlayerSnapshot>>) {
+fn worker(receiver:Receiver<Request>,shared:Arc<Mutex<PlayerSnapshot>>,device:Arc<Mutex<String>>) {
     let mut snapshot=PlayerSnapshot::default();
     let mut playing:Option<Playing>=None;
     let mut last:Option<(String,PathBuf)>=None;
@@ -258,7 +284,7 @@ fn worker(receiver:Receiver<Request>,shared:Arc<Mutex<PlayerSnapshot>>) {
                             if let Some(old)=playing.take(){old.sink.stop();}
                             snapshot.id=Some(id.clone());snapshot.state="loading".into();snapshot.position=0.0;
                             snapshot.duration=None;snapshot.error=None;last=Some((id,path.clone()));publish(&shared,&snapshot);
-                            match start_audio(&path,snapshot.volume,position,&request.cancelled){
+                            match start_audio(&path,snapshot.volume,position,&request.cancelled,&device){
                                 Ok((audio,duration))=>{playing=Some(audio);snapshot.duration=duration;snapshot.position=position;snapshot.state="playing".into();},
                                 Err(e)=>{fail(&mut snapshot,e.clone());return Err(e);}
                             }
@@ -274,7 +300,7 @@ fn worker(receiver:Receiver<Request>,shared:Arc<Mutex<PlayerSnapshot>>) {
                                     if let Some(audio)=&playing {audio.sink.play();snapshot.state="playing".into();}
                                     else {
                                         let (_,path)=last.as_ref().ok_or("请先选择一条素材并播放")?;
-                                        match start_audio(path,snapshot.volume,0.0,&request.cancelled){
+                                        match start_audio(path,snapshot.volume,0.0,&request.cancelled,&device){
                                             Ok((audio,duration))=>{playing=Some(audio);snapshot.duration=duration;snapshot.position=0.0;snapshot.state="playing".into();},
                                             Err(e)=>{fail(&mut snapshot,e.clone());return Err(e);}
                                         }
@@ -337,13 +363,12 @@ pub async fn player_load(id:String,catalog:tauri::State<'_,CatalogState>,player:
 }
 #[tauri::command]
 pub async fn player_preview_at(id:String,position:f64,catalog:tauri::State<'_,CatalogState>,player:tauri::State<'_,PlayerState>)->Result<PlayerSnapshot,String>{
-    validate_preview(position,WAVE_SECONDS as f64)?;
+    // 先挡掉 NaN/负数；真实上界在解析出源文件后按文件头时长校验，波形现在覆盖全长。
+    validate_preview(position,f64::MAX)?;
     let catalog=catalog.inner().clone();let player=player.inner().clone();
     tauri::async_runtime::spawn_blocking(move||{
         let path=catalog.resolve_asset(&id)?;
-        let source=PlaybackSource::open(&path)?;
-        let limit=(WAVE_MAX_SAMPLES as f64/(source.sample_rate() as f64*source.channels() as f64)).min(WAVE_SECONDS as f64);
-        validate_preview(position,source.total_duration().map(|duration|duration.as_secs_f64()).unwrap_or(limit).min(limit))?;
+        validate_preview(position,crate::duration::seconds(&path).unwrap_or(f64::MAX))?;
         let snapshot=player.request(Command::Load{id:id.clone(),path,position})?;
         let _=catalog.record_played(&id);Ok(snapshot)
     }).await.map_err(|e|e.to_string())?
@@ -384,19 +409,26 @@ pub struct Waveform {
     #[serde(default)] pub channel_peaks:Vec<Vec<f32>>,
 }
 // Bump when decoding, duration calculation or bucket semantics change.
-const WAVE_CACHE_VERSION: u32 = 4;
+// 5：新增「简化小波形」变体，身份里带 variant 后旧记录一律失效。
+// 6：波形改为覆盖整条音频（流式归并降采样，不再截断到 12/60 秒）；
+//    之前所有缓存都只含片段峰值，必须整批失效重算，否则界面会把片段误当全长。
+const WAVE_CACHE_VERSION: u32 = 6;
 const CACHE_ENTRIES: usize = 256;
 const CACHE_BYTES: u64 = 16 * 1024 * 1024;
 const CACHE_RECORD_BYTES: u64 = 128 * 1024;
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-struct WaveIdentity { path:PathBuf, size:u64, modified_ns:u128, version:u32 }
+struct WaveIdentity { path:PathBuf, size:u64, modified_ns:u128, version:u32, variant:u8 }
 impl WaveIdentity {
-    fn read(path:&Path)->std::io::Result<Self>{
+    /// 完整波形的身份；生产路径统一走 for_variant，供测试与验收脚本沿用旧名字。
+    #[cfg(test)]
+    fn read(path:&Path)->std::io::Result<Self>{Self::for_variant(path,0)}
+    /// 完整波形 variant=0，简化小波形 variant=1；两者分析和缓存目录都不同，禁止互用。
+    fn for_variant(path:&Path,variant:u8)->std::io::Result<Self>{
         let path=path.canonicalize()?;
         let metadata=fs::metadata(&path)?;
         if !metadata.is_file(){return Err(std::io::Error::other("not a file"));}
         let modified_ns=metadata.modified()?.duration_since(UNIX_EPOCH).map_err(std::io::Error::other)?.as_nanos();
-        let identity=Self{path,size:metadata.len(),modified_ns,version:WAVE_CACHE_VERSION};
+        let identity=Self{path,size:metadata.len(),modified_ns,version:WAVE_CACHE_VERSION,variant};
         // Non-Unicode native paths may not serialize as JSON; skip caching, not playback.
         serde_json::to_vec(&identity).map_err(std::io::Error::other)?;
         Ok(identity)
@@ -412,8 +444,9 @@ fn valid_wave(wave:&Waveform)->bool{
     !wave.peaks.is_empty() && wave.peaks.len()<=WAVE_MAX_PEAKS
         && wave.peaks.iter().all(|p|p.is_finite() && (0.0..=1.0).contains(p))
         && wave.analyzed_duration.is_finite() && wave.analyzed_duration>0.0
-        && wave.analyzed_duration<=WAVE_SECONDS as f64
-        && wave.duration.is_none_or(|d|d.is_finite() && d>0.0)
+        // 全长波形：已分析时长应与文件头时长基本一致，留 1 秒容错给 gapless/编码填充。
+        // 旧缓存只分析前 12/60 秒，虽然也满足正数检查，但已被 version=6 整批挡掉。
+        && wave.duration.is_none_or(|d|d.is_finite() && d>0.0 && wave.analyzed_duration<=d+1.0)
         && (wave.channel_peaks.is_empty() || (
             wave.channels>1
             && wave.channel_peaks.len()==wave.channels as usize
@@ -465,28 +498,36 @@ fn write_cached(dir:&Path,identity:WaveIdentity,wave:&Waveform)->std::io::Result
 }
 #[derive(Serialize)]
 struct WaveRecordRef<'a>{identity:&'a WaveIdentity,wave:&'a Waveform}
-fn cached_waveform(path:&Path,cache:Option<&Path>)->Result<Waveform,String>{
-    let before=WaveIdentity::read(path).ok();
+fn cached_waveform(path:&Path,cache:Option<&Path>,simple:bool)->Result<Waveform,String>{
+    let variant=if simple{1}else{0};
+    let before=WaveIdentity::for_variant(path,variant).ok();
     if let (Some(dir),Some(identity))=(cache,before.as_ref()){
         // Also trim on hits, so stale versions/leftover temporary files stay bounded.
         let _=trim_cache(dir,CACHE_ENTRIES,CACHE_BYTES);
         if let Some(wave)=read_cached(dir,identity){
-            if WaveIdentity::read(path).ok().as_ref()==Some(identity){return Ok(wave);}
+            if WaveIdentity::for_variant(path,variant).ok().as_ref()==Some(identity){return Ok(wave);}
         }
     }
-    let wave=analyze_waveform(path)?;
+    let wave=analyze_waveform(path,simple)?;
     if let (Some(dir),Some(identity))=(cache,before){
-        if WaveIdentity::read(path).ok().as_ref()==Some(&identity){let _=write_cached(dir,identity,&wave);}
+        if WaveIdentity::for_variant(path,variant).ok().as_ref()==Some(&identity){let _=write_cached(dir,identity,&wave);}
     }
     Ok(wave)
 }
-// 波形解码的串行化由 Inner.wave_lock 在 spawn_blocking 内排队完成，见 player_waveform。
-fn analyze_waveform(path:&Path)->Result<Waveform,String>{
+/// 波形解码的串行化由 WAVE_DECODE_LOCK 在 spawn_blocking 内排队完成，见 player_waveform。
+fn analyze_waveform(path:&Path,simple:bool)->Result<Waveform,String>{
     // 与试听/混音共用gapless解码时间轴，避免MP3峰值包含编码延迟和填充。
     let mut source=PlaybackSource::open(path)?;
-    let wave=analyze_source(&mut source,crate::duration::seconds(path))?;
+    let wave=analyze_source_with(&mut source,crate::duration::seconds(path),if simple{WaveOptions::mini()}else{WaveOptions::full()})?;
     if let Some(error)=source.decode_error(){return Err(format!("波形解码失败：{error}"));}
     Ok(wave)
+}
+#[derive(Clone,Copy)]
+/// 两种规格都覆盖整条音频；差别只在峰值密度、是否分声道、起始分桶密度。
+struct WaveOptions{max_peaks:usize,bucket_divisor:u64,split:bool}
+impl WaveOptions{
+    fn full()->Self{Self{max_peaks:WAVE_MAX_PEAKS,bucket_divisor:10_000,split:true}}
+    fn mini()->Self{Self{max_peaks:WAVE_MINI_PEAKS,bucket_divisor:WAVE_MINI_BUCKET_DIVISOR,split:false}}
 }
 fn reduce_buckets(buckets:&[f32],bins:usize)->Vec<f32>{
     (0..bins).map(|i|{
@@ -494,26 +535,45 @@ fn reduce_buckets(buckets:&[f32],bins:usize)->Vec<f32>{
         buckets[start..end].iter().copied().fold(0.0f32,f32::max)
     }).collect()
 }
+/// 测试用的「完整规格」入口；生产路径走 analyze_waveform -> analyze_source_with。
+#[cfg(test)]
 fn analyze_source(source:impl Source<Item=f32>,duration:Option<f64>)->Result<Waveform,String>{
+    analyze_source_with(source,duration,WaveOptions::full())
+}
+fn analyze_source_with(source:impl Source<Item=f32>,duration:Option<f64>,options:WaveOptions)->Result<Waveform,String>{
     let rate=source.sample_rate() as u64;let channels=source.channels() as u64;
     if rate==0||channels==0{return Err("音频规格无效".into());}
     let per_second=rate.checked_mul(channels).ok_or("音频规格超出分析范围")?;
-    let limit=per_second.saturating_mul(WAVE_SECONDS).min(WAVE_MAX_SAMPLES);
-    // ~0.1ms real-sample maxima retain short transients before final reduction.
-    // At most 1.2 million temporary peaks within the existing 60s cap.
-    // Reserve the bounded length explicitly (under 4.8MiB), avoiding Vec doubling.
-    let bucket_samples=(per_second/10_000).max(1);
-    let capacity=limit.div_ceil(bucket_samples) as usize;
-    let mut buckets:Vec<f32>=Vec::with_capacity(capacity);let mut count=0u64;
-    // 每声道独立包络：立体声上下分轨渲染靠它，单声道留空以省内存。
-    let split=channels>1;
-    let mut lanes:Vec<Vec<f32>>=if split{(0..channels).map(|_|Vec::with_capacity(capacity)).collect()}else{Vec::new()};
+    // 覆盖整条音频：按文件头时长算读取上限（多留 1 秒容错），不再截断到 12/60 秒。
+    // 只有读不到时长的源（无限合成源/损坏头）才退回安全上限，并由绝对上限兜底。
+    let limit=duration.filter(|d|d.is_finite()&&*d>0.0)
+        .map(|d|(d*per_second as f64).ceil() as u64+per_second)
+        .unwrap_or(WAVE_MAX_SAMPLES).min(WAVE_ABSOLUTE_MAX_SAMPLES);
+    // 分桶数超过 2×目标峰值时两两归并、桶宽翻倍：内存恒定，末尾瞬态不会因截断丢失。
+    // 这是全长显示下的提速关键——省的是内存与最终 SVG 点数，不是音频内容。
+    let mut bucket_samples=(per_second/options.bucket_divisor).max(1);
+    let merge_at=(options.max_peaks*2).max(64);
+    let mut buckets:Vec<f32>=Vec::with_capacity(merge_at);let mut count=0u64;
+    // 每声道独立包络：立体声上下分轨渲染靠它，简化模式合并成一条。
+    let split=options.split&&channels>1;
+    let mut lanes:Vec<Vec<f32>>=if split{(0..channels).map(|_|Vec::with_capacity(merge_at)).collect()}else{Vec::new()};
     for sample in source.take(limit as usize){
         if !sample.is_finite(){return Err("波形解码出现非有限采样值".into());}
-        let bucket=(count/bucket_samples) as usize;
-        if bucket==buckets.len(){
-            buckets.push(0.0);
-            for lane in lanes.iter_mut(){lane.push(0.0);}
+        let mut bucket=(count/bucket_samples) as usize;
+        if bucket>=merge_at{
+            let kept=buckets.len().div_ceil(2);
+            for i in 0..kept{buckets[i]=buckets[2*i].max(buckets.get(2*i+1).copied().unwrap_or(0.0));}
+            buckets.truncate(kept);
+            for lane in lanes.iter_mut(){
+                for i in 0..kept{lane[i]=lane[2*i].max(lane.get(2*i+1).copied().unwrap_or(0.0));}
+                lane.truncate(kept);
+            }
+            bucket_samples=bucket_samples.saturating_mul(2);
+            bucket=(count/bucket_samples) as usize;
+        }
+        if bucket>=buckets.len(){
+            buckets.resize(bucket+1,0.0);
+            for lane in lanes.iter_mut(){lane.resize(bucket+1,0.0);}
         }
         let value=sample.abs().min(1.0);
         buckets[bucket]=buckets[bucket].max(value);
@@ -521,21 +581,35 @@ fn analyze_source(source:impl Source<Item=f32>,duration:Option<f64>)->Result<Wav
         count+=1;
     }
     if count==0{return Err("音频没有可分析的采样".into());}
-    let bins=buckets.len().min(WAVE_MAX_PEAKS);
+    let bins=buckets.len().min(options.max_peaks);
     let peaks=reduce_buckets(&buckets,bins);
     let channel_peaks=lanes.iter().map(|lane|reduce_buckets(lane,bins)).collect();
-    Ok(Waveform{peaks,duration,analyzed_duration:count as f64/per_second as f64,truncated:count>=limit,channels:channels as u16,channel_peaks})
+    Ok(Waveform{peaks,duration,analyzed_duration:count as f64/per_second as f64,truncated:count>=limit,channels:if split{channels as u16}else{1},channel_peaks})
 }
 #[tauri::command]
-pub async fn player_waveform(id:String,catalog:tauri::State<'_,CatalogState>,player:tauri::State<'_,PlayerState>,app:tauri::AppHandle)->Result<Waveform,String>{
-    // 波形解码互斥由「单槽立即失败」改为「排队等待」：列表滚动时多个请求不再互相撞成
-    // "波形分析进行中"，锁在 spawn_blocking 线程内持有，不占 async runtime 工作线程。
-    let lock=player.inner.wave_lock.clone();let catalog=catalog.inner().clone();
-    let cache=app.path().app_cache_dir().ok().map(|p|p.join("waveforms-v1"));
+pub async fn player_waveform(id:String,simple:Option<bool>,catalog:tauri::State<'_,CatalogState>)->Result<Waveform,String>{
+    // 解码串行化：列表读取与设置页预生成共用同一把锁，在 spawn_blocking 线程内排队，
+    // 不占 async runtime 工作线程；锁内才解析缓存根，保证自定义路径与开关实时生效。
+    let catalog=catalog.inner().clone();
+    let simple=simple.unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move||{
-        let _guard=lock.lock().map_err(|_|"波形分析锁不可用".to_string())?;
-        let path=catalog.resolve_asset(&id)?;cached_waveform(&path,cache.as_deref())
+        let _guard=WAVE_DECODE_LOCK.lock().map_err(|_|"波形分析锁不可用".to_string())?;
+        let cache=crate::settings_ops::cache_enabled().then(||crate::settings_ops::wave_dir(simple));
+        let path=catalog.resolve_asset(&id)?;
+        cached_waveform(&path,cache.as_deref(),simple)
     }).await.map_err(|e|e.to_string())?
+}
+/// 设置页「预生成波形缓存」用：已有有效缓存返回 Ok(false) 直接跳过，否则生成简化小波形返回 Ok(true)。
+/// 调用方在批量循环里逐个检查取消标记；本函数只负责单条、且与界面读取共用解码锁。
+pub fn pregenerate_wave_cache(source:&Path,dir:&Path,simple:bool)->Result<bool,String>{
+    let _guard=WAVE_DECODE_LOCK.lock().map_err(|_|"波形分析锁不可用".to_string())?;
+    let identity=WaveIdentity::for_variant(source,if simple{1}else{0}).ok();
+    if let Some(identity)=identity.as_ref(){
+        if read_cached(dir,identity).is_some(){return Ok(false);}
+    }
+    let wave=analyze_waveform(source,simple)?;
+    if let Some(identity)=identity{let _=write_cached(dir,identity,&wave);}
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -576,6 +650,38 @@ mod tests{
         assert_eq!(wave.peaks,vec![0.1,0.5,0.0]);assert_eq!(wave.analyzed_duration,0.003);assert!(!wave.truncated);
     }
     #[test]
+    fn mini_waveform_covers_full_length_as_single_lane(){
+        // 3 秒音频、末尾一个瞬态：简化模式也必须把末尾画出来，不能只显示开头一段。
+        let rate=44100u32;let total=(rate as usize)*3;
+        let mut samples=vec![0.0f32;total];samples[0]=0.2;samples[total-1]=0.9;
+        let wave=analyze_source_with(rodio::buffer::SamplesBuffer::new(1,rate,samples),Some(3.0),WaveOptions::mini()).unwrap();
+        assert!(wave.peaks.len()<=WAVE_MINI_PEAKS,"简化模式峰值数必须收窄：{}",wave.peaks.len());
+        assert_eq!(wave.channels,1);
+        assert!(wave.channel_peaks.is_empty(),"简化模式只画一条，不得产生声道分轨数据");
+        assert!(!wave.truncated,"波形不得截断");
+        assert!((wave.analyzed_duration-3.0).abs()<1e-6,"必须覆盖整条 3 秒音频：{}",wave.analyzed_duration);
+        assert!(wave.peaks.last().copied().unwrap()>0.8,"末尾瞬态必须仍在波形里");
+        let file=analyze_waveform(&sample("pcm-44100.wav"),true).unwrap();
+        assert!(!file.truncated,"真实文件的简化波形也不得截断");
+    }
+    #[test]
+    fn mini_and_full_wave_identities_are_separate(){
+        let path=sample("pcm-44100.wav");
+        let full=WaveIdentity::read(&path).unwrap();
+        let mini=WaveIdentity::for_variant(&path,1).unwrap();
+        assert_ne!(full.filename(),mini.filename(),"简化与完整波形不得共用缓存记录");
+    }
+    #[test]
+    fn pregenerate_creates_missing_cache_and_skips_existing(){
+        let temp=TestDir::new();let source=sample("pcm-44100.wav");
+        assert!(pregenerate_wave_cache(&source,&temp.0,true).unwrap(),"首次应生成缓存");
+        assert!(!pregenerate_wave_cache(&source,&temp.0,true).unwrap(),"已有缓存应跳过");
+        let identity=WaveIdentity::for_variant(&source,1).unwrap();
+        let cached=read_cached(&temp.0,&identity).unwrap();
+        assert!(cached.peaks.len()<=WAVE_MINI_PEAKS);
+        assert!(cached.channel_peaks.is_empty());
+    }
+    #[test]
     fn old_wave_algorithm_records_are_not_reused(){
         let temp=TestDir::new();let path=sample("pcm-44100.wav");let identity=WaveIdentity::read(&path).unwrap();
         let mut old=WaveIdentity::read(&path).unwrap();old.version=2;
@@ -584,7 +690,7 @@ mod tests{
         // Even a stale record placed at the new key is rejected by its embedded identity.
         fs::write(temp.0.join(identity.filename()),serde_json::to_vec(&WaveRecordRef{identity:&old,wave:&old_wave}).unwrap()).unwrap();
         assert!(read_cached(&temp.0,&identity).is_none());
-        let wave=cached_waveform(&path,Some(&temp.0)).unwrap();assert_eq!(wave.peaks.len(),4096);
+        let wave=cached_waveform(&path,Some(&temp.0),false).unwrap();assert_eq!(wave.peaks.len(),4096);
         assert!(fs::metadata(temp.0.join(identity.filename())).unwrap().len()<=CACHE_RECORD_BYTES);
         assert!(read_cached(&temp.0,&identity).is_some());
     }
@@ -642,16 +748,16 @@ mod tests{
     #[test]
     fn waveform_cache_persists_and_recovers_from_corruption(){
         let temp=TestDir::new();let source=sample("pcm-44100.wav");
-        let first=cached_waveform(&source,Some(&temp.0)).unwrap();
+        let first=cached_waveform(&source,Some(&temp.0),false).unwrap();
         let identity=WaveIdentity::read(&source).unwrap();let record=temp.0.join(identity.filename());
         let cached=read_cached(&temp.0,&identity).unwrap();assert_eq!(first.peaks,cached.peaks);
         // An invalid but well-formed record cannot be served.
         let invalid=Waveform{peaks:vec![2.0],duration:Some(1.0),analyzed_duration:1.0,truncated:false,channels:1,channel_peaks:Vec::new()};
         fs::write(&record,serde_json::to_vec(&WaveRecordRef{identity:&identity,wave:&invalid}).unwrap()).unwrap();
         assert!(read_cached(&temp.0,&identity).is_none());
-        let recovered=cached_waveform(&source,Some(&temp.0)).unwrap();assert_eq!(first.peaks,recovered.peaks);
+        let recovered=cached_waveform(&source,Some(&temp.0),false).unwrap();assert_eq!(first.peaks,recovered.peaks);
         fs::write(&record,b"broken JSON").unwrap();assert!(read_cached(&temp.0,&identity).is_none());
-        assert!(cached_waveform(&source,Some(&temp.0)).is_ok());
+        assert!(cached_waveform(&source,Some(&temp.0),false).is_ok());
         fs::write(&record,vec![b' ';CACHE_RECORD_BYTES as usize+1]).unwrap();assert!(read_cached(&temp.0,&identity).is_none());
     }
     #[test]
@@ -679,7 +785,7 @@ mod tests{
     #[test]
     fn unavailable_cache_does_not_block_waveform(){
         let temp=TestDir::new();let invalid=temp.0.join("file-not-directory");fs::write(&invalid,b"x").unwrap();
-        assert!(cached_waveform(&sample("pcm-44100.wav"),Some(&invalid)).is_ok());
+        assert!(cached_waveform(&sample("pcm-44100.wav"),Some(&invalid),false).is_ok());
     }
     fn sample(name:&str)->PathBuf{Path::new(env!("CARGO_MANIFEST_DIR")).join("../build/s1-samples").join(name)}
     #[test]
@@ -701,25 +807,31 @@ mod tests{
     #[test]
     fn waveform_reads_four_formats_without_sound_device(){
         for name in ["pcm-44100.wav","pcm-48000.aiff","lossless-48000.flac","lossy-44100.mp3"]{
-            let path=sample(name);let before=std::fs::read(&path).unwrap();let wave=analyze_waveform(&path).unwrap();
+            let path=sample(name);let before=std::fs::read(&path).unwrap();let wave=analyze_waveform(&path,false).unwrap();
             assert_eq!(wave.peaks.len(),WAVE_MAX_PEAKS);assert!(wave.peaks.iter().all(|v|v.is_finite()&&(0.0..=1.0).contains(v)));assert!(wave.peaks.iter().any(|v|*v>0.0));
             assert!((0.4..0.7).contains(&wave.analyzed_duration));assert!(!wave.truncated);assert_eq!(before,std::fs::read(&path).unwrap());
         }
     }
     #[test]
     fn mp3_waveform_uses_same_gapless_timeline_as_playback(){
-        let path=sample("lossy-44100.mp3");let before=fs::read(&path).unwrap();let wave=analyze_waveform(&path).unwrap();
-        assert_eq!(WAVE_CACHE_VERSION,4,"含MP3填充的旧峰值、以及缺少声道分轨的旧记录都不得复用");
+        let path=sample("lossy-44100.mp3");let before=fs::read(&path).unwrap();let wave=analyze_waveform(&path,false).unwrap();
+        assert_eq!(WAVE_CACHE_VERSION,6,"含MP3填充的旧峰值、以及只含片段峰值的旧记录都不得复用");
         assert!((wave.analyzed_duration-0.5).abs()<1e-9,"波形时间轴必须只覆盖有效0.5秒，实际{}",wave.analyzed_duration);
         assert_eq!(wave.duration,Some(0.5));assert!(!wave.truncated);assert_eq!(wave.peaks.len(),WAVE_MAX_PEAKS);
         assert_eq!(fs::read(&path).unwrap(),before);
     }
     #[test]
-    fn waveform_lock_releases_after_decode_error(){let lock=Arc::new(Mutex::new(()));{let _guard=lock.lock().unwrap();assert!(analyze_waveform(Path::new("missing-waveform-input.wav")).is_err());}assert!(lock.try_lock().is_ok());}
+    fn waveform_lock_releases_after_decode_error(){let lock=Arc::new(Mutex::new(()));{let _guard=lock.lock().unwrap();assert!(analyze_waveform(Path::new("missing-waveform-input.wav"),false).is_err());}assert!(lock.try_lock().is_ok());}
     #[test]
-    fn waveform_stops_at_sixty_seconds_without_output(){
-        let wave=analyze_source(rodio::source::SineWave::new(440.0),None).unwrap();
-        assert!(wave.truncated);assert_eq!(wave.peaks.len(),WAVE_MAX_PEAKS);assert!((wave.analyzed_duration-60.0).abs()<0.001);
+    fn waveform_covers_entire_source_instead_of_first_minute(){
+        // 90 秒源，末尾一个瞬态：旧的 60 秒截断会把末尾整个丢掉。
+        let rate=8000u32;let total=(rate as usize)*90;
+        let mut samples=vec![0.0f32;total];samples[0]=0.2;samples[total-1]=0.95;
+        let wave=analyze_source(rodio::buffer::SamplesBuffer::new(1,rate,samples),Some(90.0)).unwrap();
+        assert!(!wave.truncated,"全长波形不得标记截断");
+        assert!((wave.analyzed_duration-90.0).abs()<1e-6,"必须覆盖整条 90 秒音频：{}",wave.analyzed_duration);
+        assert_eq!(wave.peaks.len(),WAVE_MAX_PEAKS);
+        assert!(wave.peaks.last().copied().unwrap()>0.9,"90 秒处的末尾瞬态必须显示出来");
     }
     #[test]
     fn volume_and_stop_commands_do_not_require_a_device(){
