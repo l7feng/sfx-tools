@@ -30,8 +30,7 @@
 
 .workspace-v2 .workspace-header.is-collapsed .workspace-navigation{height:29px}
 
-.library-tools-inline{flex-shrink:0;max-height:60vh;overflow:auto;border-bottom:1px solid var(--line)}.library-tools-inline>header{display:flex;justify-content:space-between;align-items:center;padding:6px 14px}.tree-pins{border-bottom:1px solid var(--line);padding:6px}.tree-pins strong{font-size:12px;color:var(--accent)}.tree-pins button{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.music-categories{padding:8px 14px;border-bottom:1px solid var(--line);font-size:13px;flex-shrink:0}.music-categories>div{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.music-categories label{display:flex;align-items:center;gap:6px}.music-categories small{color:var(--muted)}
-
+.library-tools-inline{flex-shrink:0;max-height:60vh;overflow:auto;border-bottom:1px solid var(--line)}.library-tools-inline>header{display:flex;justify-content:space-between;align-items:center;padding:6px 14px}.tree-pins{border-bottom:1px solid var(--line);padding:6px}.tree-pins strong{font-size:12px;color:var(--accent)}.tree-pins button{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .compact-brand .app-version{font:10px/1 var(--mono);color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:2px 5px;letter-spacing:0}
 .statusbar .status-version{flex:0 0 auto;font:10px/1.6 var(--mono);color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:1px 5px;letter-spacing:.3px;white-space:nowrap;cursor:default;user-select:text}
 .workspace-v2 .statusbar>span.status-version{flex:0 0 auto;overflow:visible}
@@ -100,3 +99,27 @@
 .theme-swatch[data-accent=teal]{background:#58c4a3}
 .theme-swatch[data-accent=violet]{background:#a98bd8}
 .theme-swatch[aria-pressed=true]{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--accent)}
+
+
+/* 0.1.19 列表紧凑化 + 参考图列结构：行高 38px、名称单行、排序箭头、行内操作按钮。 */
+.workspace-v2 td{height:38px;font-size:12px;padding-right:10px;vertical-align:middle}
+.workspace-v2.density-comfortable td{height:48px}
+.workspace-v2 .asset-name{flex-direction:row;align-items:center;gap:5px;min-height:0;padding:0;width:100%}
+.workspace-v2 .asset-name strong{font-size:12px;line-height:1.4;max-width:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.workspace-v2 .asset-name small{display:none}
+.workspace-v2 .mini-waveform{height:28px}
+.workspace-v2 .mini-waveform-message{line-height:28px}
+.workspace-v2 th.is-sortable{cursor:pointer}
+.workspace-v2 th.is-sortable:hover{color:var(--text)}
+.workspace-v2 th.is-sorted{color:var(--accent)}
+.sort-arrow{margin-left:5px;font-size:9px;color:var(--accent)}
+.workspace-v2 th.is-narrow,.workspace-v2 td.is-narrow{text-align:center;padding-left:0!important;padding-right:0!important}
+.row-index{font:11px var(--mono);color:var(--muted)}
+.cell-tags{display:flex;align-items:center;gap:3px;overflow:hidden}
+.cell-tag{border:1px solid var(--line);border-radius:3px;padding:1px 5px;font-size:10px;line-height:1.5;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px}
+.cell-tag-more{font:10px var(--mono);color:var(--muted);white-space:nowrap}
+.cell-empty{color:var(--line-strong)}
+.asset-status-dot{flex:none;width:13px;height:13px;line-height:12px;text-align:center;border-radius:50%;background:var(--danger-line);color:var(--danger);font:10px var(--mono)}
+.row-icon-button{width:24px;height:24px;min-width:24px;min-height:24px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--muted);font-size:15px;line-height:1}
+.row-icon-button:hover{border-color:var(--line);color:var(--text);background:var(--raised-hover)}
+.row-favorite.is-on{color:var(--accent)}

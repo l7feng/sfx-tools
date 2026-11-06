@@ -206,5 +206,21 @@
 - 验收：`player::tests` 19 项、`visual_analysis` 4 项、`full_wave` 3 项通过（新增 `stereo_waveform_keeps_per_channel_lanes`）；全量 `cargo test` 152 通过 / 2 失败（`catalog::real_worker_cancel_resume_and_single_task_guard` 的超时断言、`model_download::single_file_full_download_is_verified` 需外网，均为既有偶发，与本轮无关）；`tsc --noEmit` 与 debug 构建通过；EXE 0.1.18，25010176 字节，2026/11/06 10:43。
 - 实测：合成一段「左声道前 1.5 秒满、右声道后 1.5 秒满」的立体声与一段单声道，导入临时目录验证——`channel_peaks` 前后半段均值为 0.393 / 0.035，与信号完全一致；单声道 `channel_peaks` 为空、列表按单轨渲染。验收后临时条目已从素材库移除。
 
-边界：列表小波形只有 34px 高，立体声两轨各约 16px，够看出「上下两条 + 分隔线」，看不清左右电平细节；`spectral-view.css` 的画布配色未接新配色；「按频谱着色」模式仍然保留，是否下线待定。
-
+边界：列表小波形只有 34px 高，立体声两轨各约 16px，够看出「上下两条 + 分隔线」，看不清左右电平细节；`spectral-view.css` 的画布配色未接新配色；「按频谱着色」模式仍然保留，是否下线待定。
+
+## 0.1.19 列表列重构与音乐库（配乐）窗口
+
+按人类三条反馈落地：列设置删除「状态」、参考图 1 重排列表、参考图 2 优化配乐窗口。裁决为「列结构＋行高紧凑」与「筛选维度条＋BPM/调性列＋音乐详情组」。
+
+- 列模型：`workbench-state.ts` 的 `ColumnId` 由 6 项扩到 12 项，删掉 `status`，新增 `#`／分类／声道／收藏／播放列表，以及只在音乐库出现的 BPM／调性（`musicOnly`）。`columnDefinitions` 每项带 `widthIndex` 与 `musicOnly`／`sortable` 标记，`visibleColumns(layout,library)` 按库过滤，列设置里音效库看不到 BPM／调性。
+- 旧布局迁移：6 项／5 项旧列宽数组按列名回填到新索引；纯旧列序、或「旧五列在前＋新列被追加在后」的升级中间态，整体回到新默认列序，同时清掉状态列残留的隐藏项。用户已经调过顺序（存档里出现新列且不是追加型）则继续沿用。
+- 紧凑列表：行高 53→38px（舒适密度 48px），素材名单行显示并去掉音频扩展名，完整文件名与路径移到悬停提示，小波形 34→28px。状态信息不丢——文件缺失／已变化／读取失败的行在名称前加红色小圆点，悬停看全文，不再占一列。
+- 表头排序：文件名／时长／采样率三列可点击切换升降序并显示 ▲▼，`aria-sort` 同步；后端 `sort` 白名单补 `name_desc`／`duration_desc`／`rate_desc`，NULL 时长仍排最后；顶部「排序方式」下拉显示当前字段而非空值。
+- 行内操作：♡ 即时收藏／取消（`catalog_set_favorite`），≡ 弹出播放列表浮层，可选现有歌单或新建后直接加入（`library_playlist_create` + `library_playlist_add`）。新建 `playlist-picker.tsx`／`playlist-picker.css`，所有写入只改本机目录、不动原音频。
+- 音乐库筛选维度条：删除折叠式的 `music-categories.tsx`，改为 `music-filters.tsx`／`music-filters.css` 常驻一行「曲风／情绪／用途场景／乐器／人声／BPM／调性／时长」下拉。维度值来自已有标签（带计数）＋内置建议，可多选并取交集；后端 `catalog_list` 新增 `tags:Vec<String>`，逐项生成 EXISTS 条件，上限 8 项。已选条件以 chip 显示，可单个 × 或「清除全部」。每个下拉底部有「自定义…＋加到素材」，把 `维度:值` 写进所选素材的标签；曲风兼容早期 `曲风:` 前缀。
+- 时长维度走真实 `duration` 区间（后端新增 `min_duration`／`max_duration`，未知时长一律排除），不伪造 BPM／调性自动分析；BPM／调性列从 `BPM:`／`调性:` 标签读取，未标注显示「—」。
+- 音乐详情组：`asset-detail.tsx` 新增 `library` 参数，音乐库时多出「音乐信息」组（艺术家／专辑／BPM／调性／年份／曲风），编辑表单写回同维度标签并保留其他标签，原音频不改写。
+
+验收：全量 `cargo test --bin sfx-tools` 156 通过 / 0 失败 / 6 忽略（新增 `sorts_descending_and_filters_by_duration_range`、`multiple_dimension_tag_filters_intersect`）；`tsc --noEmit` 与 `npm run tauri -- build --debug --no-bundle` 通过；EXE 0.1.19，25026560 字节，2026/11/06 11:27。CDP 端到端模拟 0.1.18 存档升级：音效库列序变为 `# / 波形 / 文件名 / 分类 / 时长 / 声道 / 采样率 / 收藏 / 播放列表`，音乐库多出 BPM／调性，行高实测 38px；点表头排序箭头切换为降序、播放列表浮层、维度多选 chip、时长「3 分以上」把 2169 条筛到 180 条，逐项截图核对暗色／亮色无裁切。
+
+边界：列多了之后窄窗口仍需横向滚动（1440px 默认窗口基本铺满）；「按频谱着色」模式仍保留，是否下线待定；`src-tauri/icons/*` 三版候选图标仍待选定，未纳入提交；安装包未生成。

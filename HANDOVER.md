@@ -1,6 +1,6 @@
 # SFX Tools 交接文档（供新 Agent 接手）
 
-> 生成：2026-11-05，最后更新 2026-11-06。当前版本 **0.1.18**（SFX Tools；Cargo/npm 包名 `sfx-tools`；debug/no-bundle，已构建并提交推送）。
+> 生成：2026-11-05，最后更新 2026-11-06。当前版本 **0.1.19**（SFX Tools；Cargo/npm 包名 `sfx-tools`；debug/no-bundle，已构建并提交推送）。
 > 本文件自包含，新 agent 无需依赖历史对话或 WorkBuddy Skill 机制即可接手。
 
 ## 1. 项目定位与关键路径
@@ -69,7 +69,21 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 - 上游 `laion/clap-htsat-unfused` 为 Apache-2.0；`Xenova` 仓库**无 LICENSE、无 license 字段**，再分发需我们自行补齐声明（见 25 号审计「路线甲」）。
 - 长音频确定性取开头 480000 samples（10s），未与官方 `ClapFeatureExtractor` 逐帧对照。
 
-## 5. 0.1.18 已交付（本批）
+## 5. 0.1.19 已交付（本批）
+
+按人类三条反馈落地：列设置删「状态」、参考图 1 重排列表并压缩行高、参考图 2 优化配乐窗口。裁决为「列结构＋行高紧凑」与「筛选维度条＋列＋音乐详情组」。
+
+- 列模型：`ColumnId` 6→12 项，删 `status`，新增 `#`／分类／声道／收藏／播放列表，以及 `musicOnly` 的 BPM／调性；`visibleColumns(layout,library)` 按库过滤。旧列宽按列名回填，纯旧列序与「旧列在前＋新列追加」两种存档整体回到新默认列序，避免新列全挤在表尾。
+- 列表：行高 53→38px、名称单行去扩展名、完整名与路径进悬停提示、小波形 34→28px；状态异常行以名称前的红色小圆点提示，不占列。表头三列可点击切换升降序（后端补 `*_desc` 白名单，NULL 时长仍最后）。
+- 行内操作：新增 `playlist-picker.tsx`，♡ 即时收藏、≡ 选歌单或新建后加入；均只写本机目录。
+- 筛选维度条：`music-categories.tsx` 删除，新建 `music-filters.tsx`／`music-filters.css`，常驻一行 8 个下拉（含时长）；值带计数、多选取交集（后端 `tags:Vec<String>`，上限 8）、chip 可撤销；每个下拉可给所选素材打 `维度:值` 标签。曲风兼容早期 `曲风:` 前缀。
+- 后端：`catalog_list` 增加 `tags`／`min_duration`／`max_duration` 三个参数；`SearchFilter` 增加同名字段；时间区间按真实 `duration` 过滤，未知时长排除；排序白名单补三个降序表达式。BPM／调性没有自动分析，只从标签读，未标注显示「—」。
+- 详情：`asset-detail.tsx` 增 `library` 参数，音乐库多出「音乐信息」组（艺术家／专辑／BPM／调性／年份／曲风），编辑写回标签不动原音频。
+- 测试：全量 `cargo test --bin sfx-tools` 156 通过 / 0 失败 / 6 忽略，含新增的 `sorts_descending_and_filters_by_duration_range`、`multiple_dimension_tag_filters_intersect`；`tsc --noEmit` 与 debug 构建通过；EXE 0.1.19，25026560 字节，2026/11/06 11:27。CDP 模拟 0.1.18 存档升级后列序正确、行高 38px；排序箭头、播放列表浮层、维度 chip、时长「3 分以上」2169→180 条逐项截图核对。
+
+未收口：窄窗口仍需横向滚动；「按频谱着色」是否下线待定；三版候选图标未选定；安装包未生成。
+
+### 0.1.18 波形声道分轨与详情窗口重排
 
 按人类三条反馈落地：波形配色只留蓝/白、波形要区分立体声与单声道、详情窗口按参考图整理并让标签与元数据可折叠。
 

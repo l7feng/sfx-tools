@@ -1,0 +1,14 @@
+.playlist-picker-backdrop{position:fixed;inset:0;z-index:70;background:transparent}
+.playlist-picker{position:fixed;min-width:210px;max-width:280px;background:var(--panel);border:1px solid var(--line-strong);border-radius:7px;box-shadow:var(--shadow-lg);padding:8px;font-size:12px}
+.playlist-picker header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 4px 6px;border-bottom:1px solid var(--line)}
+.playlist-picker header strong{font-weight:500;color:var(--text)}
+.playlist-picker header button{border:0;background:none;color:var(--muted);font-size:16px;line-height:1;padding:0 4px}
+.playlist-picker-hint{margin:6px 4px;font:11px var(--mono);color:var(--muted)}
+.playlist-picker-list{max-height:190px;overflow:auto;display:flex;flex-direction:column;gap:1px;margin-bottom:6px}
+.playlist-picker-list>button{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;border:0;border-radius:4px;padding:6px 7px;color:var(--text);font-size:12px}
+.playlist-picker-list>button:hover{background:var(--raised-hover)}
+.playlist-picker-list small{font:10px var(--mono);color:var(--muted)}
+.playlist-picker-empty{color:var(--muted);padding:8px 6px;margin:0}
+.playlist-picker-create{display:flex;gap:5px;padding:6px 4px 2px;border-top:1px solid var(--line)}
+.playlist-picker-create input{flex:1;min-width:0;font-size:12px}
+.playlist-picker-create button{white-space:nowrap;font-size:11px}

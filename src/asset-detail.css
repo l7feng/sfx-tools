@@ -35,3 +35,9 @@
 .asset-detail .bwf-grid{grid-template-columns:1fr;gap:7px;margin-top:4px}
 .asset-detail .bwf-grid input{box-sizing:border-box;margin-top:3px}
 .asset-detail .detail-tag-editor textarea{box-sizing:border-box}
+/* 音乐信息编辑：窄栏里同样单列，标签在上、输入框在下。 */
+.detail-music-editor{display:flex;flex-direction:column;gap:7px;padding:2px 0 4px}
+.detail-music-editor label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted)}
+.detail-music-editor input{box-sizing:border-box;width:100%;font-size:12px}
+.detail-music-editor .detail-tag-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px}
+.detail-music-editor .detail-tag-actions small{font-size:10px;color:var(--muted)}

@@ -356,7 +356,7 @@ fn folder_nodes_in_library(db:&Path,library:Option<&str>)->Result<Vec<FolderNode
     Ok(nodes.into_values().collect())
 }
 #[derive(Default)]
-struct SearchFilter<'a>{folder:Option<&'a str>,query:Option<&'a str>,format:Option<&'a str>,sort:Option<&'a str>,favorites_only:bool,library:Option<&'a str>,tag:Option<&'a str>,history_only:bool,playlist_id:Option<&'a str>}
+struct SearchFilter<'a>{folder:Option<&'a str>,query:Option<&'a str>,format:Option<&'a str>,sort:Option<&'a str>,favorites_only:bool,library:Option<&'a str>,tag:Option<&'a str>,tags:Vec<String>,history_only:bool,playlist_id:Option<&'a str>,min_duration:Option<f64>,max_duration:Option<f64>}
 fn search_page(db:&Path,offset:usize,limit:usize,filter:SearchFilter<'_>)->Result<CatalogPage,String>{
     use rusqlite::types::Value;
     let query=filter.query.unwrap_or("");
@@ -368,8 +368,11 @@ fn search_page(db:&Path,offset:usize,limit:usize,filter:SearchFilter<'_>)->Resul
     // 排序表达式只来自白名单；用户输入均用绑定参数。
     let order=match filter.sort.unwrap_or("name"){
         "name"=>"a.name COLLATE NOCASE,a.id",
+        "name_desc"=>"a.name COLLATE NOCASE DESC,a.id DESC",
         "duration"=>"a.duration IS NULL,a.duration,a.id",
+        "duration_desc"=>"a.duration IS NULL,a.duration DESC,a.id DESC",
         "rate"=>"a.rate IS NULL,a.rate,a.id",
+        "rate_desc"=>"a.rate IS NULL,a.rate DESC,a.id DESC",
         _=>return Err("不支持的排序方式。".into())
     };
     let order=if filter.history_only{"(SELECT h.played_at FROM play_history h WHERE h.asset_id=a.id) DESC,a.id"}else{order};
@@ -380,9 +383,22 @@ fn search_page(db:&Path,offset:usize,limit:usize,filter:SearchFilter<'_>)->Resul
     }
     if let Some(format)=format{values.push(Value::Text(format));conditions.push(format!("a.format=?{}",values.len()));}
     if filter.favorites_only{conditions.push("COALESCE(m.favorite,0)=1".into());}
+    // 时长区间：素材库里时长未知的记录一律不计入区间结果，避免"未知"混进 0 秒。
+    if let Some(min)=filter.min_duration.filter(|value|value.is_finite()&&*value>0.0){
+        values.push(Value::Real(min));conditions.push(format!("a.duration IS NOT NULL AND a.duration>=?{}",values.len()));
+    }
+    if let Some(max)=filter.max_duration.filter(|value|value.is_finite()&&*value>0.0){
+        values.push(Value::Real(max));conditions.push(format!("a.duration IS NOT NULL AND a.duration<=?{}",values.len()));
+    }
     if let Some(tag)=filter.tag.filter(|s|!s.is_empty()){
         if tag.chars().count()>40 || tag.chars().any(char::is_control){return Err("标签筛选内容无效。".into());}
         values.push(Value::Text(tag.to_owned()));conditions.push(format!("EXISTS(SELECT 1 FROM json_each(COALESCE(m.tags,'[]')) t WHERE t.value=?{})",values.len()));
+    }
+    // 维度条可同时勾选多个标签，彼此取交集；上限 8 个防止拼出过长 SQL。
+    if filter.tags.len()>8{return Err("标签筛选最多 8 项。".into());}
+    for tag in &filter.tags{
+        if tag.is_empty()||tag.chars().count()>40||tag.chars().any(char::is_control){return Err("标签筛选内容无效。".into());}
+        values.push(Value::Text(tag.clone()));conditions.push(format!("EXISTS(SELECT 1 FROM json_each(COALESCE(m.tags,'[]')) t WHERE t.value=?{})",values.len()));
     }
     if filter.history_only{conditions.push("EXISTS(SELECT 1 FROM play_history h WHERE h.asset_id=a.id)".into());}
     if let Some(playlist)=filter.playlist_id{
@@ -560,7 +576,7 @@ pub async fn catalog_get_items(ids:Vec<String>,state:tauri::State<'_,CatalogStat
     }).await.map_err(err)?
 }
 #[tauri::command]
-pub async fn catalog_list(state:tauri::State<'_,CatalogState>,offset:usize,limit:usize,folder:Option<String>,query:Option<String>,format:Option<String>,sort:Option<String>,favorites_only:Option<bool>,library:Option<String>,tag:Option<String>,history_only:Option<bool>,playlist_id:Option<String>)->Result<CatalogPage,String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||search_page(&db,offset,limit,SearchFilter{folder:folder.as_deref(),query:query.as_deref(),format:format.as_deref(),sort:sort.as_deref(),favorites_only:favorites_only.unwrap_or(false),library:library.as_deref(),tag:tag.as_deref(),history_only:history_only.unwrap_or(false),playlist_id:playlist_id.as_deref()})).await.map_err(err)?}
+pub async fn catalog_list(state:tauri::State<'_,CatalogState>,offset:usize,limit:usize,folder:Option<String>,query:Option<String>,format:Option<String>,sort:Option<String>,favorites_only:Option<bool>,library:Option<String>,tag:Option<String>,tags:Option<Vec<String>>,history_only:Option<bool>,playlist_id:Option<String>,min_duration:Option<f64>,max_duration:Option<f64>)->Result<CatalogPage,String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||search_page(&db,offset,limit,SearchFilter{folder:folder.as_deref(),query:query.as_deref(),format:format.as_deref(),sort:sort.as_deref(),favorites_only:favorites_only.unwrap_or(false),library:library.as_deref(),tag:tag.as_deref(),tags:tags.unwrap_or_default(),history_only:history_only.unwrap_or(false),playlist_id:playlist_id.as_deref(),min_duration,max_duration})).await.map_err(err)?}
 #[tauri::command]
 pub async fn catalog_assign_library(ids:Vec<String>,library:String,state:tauri::State<'_,CatalogState>)->Result<u64,String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||assign_library(&db,ids,&library)).await.map_err(err)?}
 #[tauri::command]
@@ -694,6 +710,41 @@ mod tests {
         let conn=connection(&f.db).unwrap();conn.execute("UPDATE assets SET duration=CASE WHEN name='other.wav' THEN 2.0 ELSE NULL END",[]).unwrap();
         let sorted=search_page(&f.db,0,100,SearchFilter{sort:Some("duration"),..Default::default()}).unwrap();assert_eq!(sorted.items[0].name,"other.wav");
         let unknown_ids:Vec<_>=sorted.items.iter().skip(1).map(|a|a.id.clone()).collect();let mut expected=unknown_ids.clone();expected.sort();assert_eq!(unknown_ids,expected);
+    }
+    #[test]
+    fn sorts_descending_and_filters_by_duration_range(){
+        let f=Fixture::new();let _state=f.state();
+        for name in ["a.wav","b.wav","c.wav"]{f.wav(name);}
+        direct(&f,"range",&AtomicBool::new(false));
+        let conn=connection(&f.db).unwrap();
+        conn.execute("UPDATE assets SET duration=CASE name WHEN 'a.wav' THEN 5.0 WHEN 'b.wav' THEN 30.0 ELSE 120.0 END",[]).unwrap();
+        drop(conn);
+        let desc=search_page(&f.db,0,100,SearchFilter{sort:Some("duration_desc"),..Default::default()}).unwrap();
+        assert_eq!(desc.items.iter().map(|a|a.name.as_str()).collect::<Vec<_>>(),vec!["c.wav","b.wav","a.wav"]);
+        let name_desc=search_page(&f.db,0,100,SearchFilter{sort:Some("name_desc"),..Default::default()}).unwrap();
+        assert_eq!(name_desc.items.iter().map(|a|a.name.as_str()).collect::<Vec<_>>(),vec!["c.wav","b.wav","a.wav"]);
+        // 时长区间：区间外的记录与时长未知的记录都不出现。
+        let ranged=search_page(&f.db,0,100,SearchFilter{min_duration:Some(10.0),max_duration:Some(60.0),..Default::default()}).unwrap();
+        assert_eq!(ranged.total,1);assert_eq!(ranged.items[0].name,"b.wav");
+        let from_ten=search_page(&f.db,0,100,SearchFilter{min_duration:Some(10.0),..Default::default()}).unwrap();
+        assert_eq!(from_ten.items.iter().map(|a|a.name.as_str()).collect::<Vec<_>>(),vec!["b.wav","c.wav"]);
+        // 排序表达式仍只走白名单。
+        assert!(search_page(&f.db,0,100,SearchFilter{sort:Some("duration; DROP TABLE assets"),..Default::default()}).is_err());
+    }
+    #[test]
+    fn multiple_dimension_tag_filters_intersect(){
+        let f=Fixture::new();let _state=f.state();
+        for name in ["a.wav","b.wav","c.wav"]{f.wav(name);}
+        direct(&f,"dimension",&AtomicBool::new(false));
+        let items=list_page(&f.db,0,100).unwrap().items;
+        assert_eq!(items.len(),3);
+        let tags=[vec!["流派:电子","情绪:紧张"],vec!["流派:电子"],vec!["情绪:紧张"]];
+        for (item,values) in items.iter().zip(tags){set_tags(&f.db,&item.id,values.into_iter().map(str::to_string).collect()).unwrap();}
+        let both=search_page(&f.db,0,100,SearchFilter{tags:vec!["流派:电子".into(),"情绪:紧张".into()],..Default::default()}).unwrap();
+        assert_eq!(both.total,1);
+        let one=search_page(&f.db,0,100,SearchFilter{tags:vec!["流派:电子".into()],..Default::default()}).unwrap();
+        assert_eq!(one.total,2);
+        assert!(search_page(&f.db,0,100,SearchFilter{tags:(0..9).map(|i|format!("t{i}")).collect(),..Default::default()}).is_err());
     }
     #[test]
     fn favorite_tags_persist_across_rescan_and_restart(){

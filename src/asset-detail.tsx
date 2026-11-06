@@ -5,8 +5,20 @@ import {BwfMetadataPanel,useBwfMeta} from './bwf-metadata';
 import {timeLabel} from './demo-data';
 import './asset-detail.css';
 
-type Group='file'|'tags'|'meta'|'ai'|'path';
-const GROUPS:Record<Group,boolean>={'file':true,'tags':true,'meta':false,'ai':false,'path':false};
+type Group='file'|'music'|'tags'|'meta'|'ai'|'path';
+const GROUPS:Record<Group,boolean>={'file':true,'music':true,'tags':true,'meta':false,'ai':false,'path':false};
+/** 音乐信息全部落在本机标签里（维度:值），不改写原音频；曲风兼容早期「曲风:」前缀。 */
+const MUSIC_FIELDS:{key:string;label:string;aliases?:string[]}[]=[
+ {key:'艺术家',label:'艺术家'},{key:'专辑',label:'专辑'},{key:'BPM',label:'BPM'},
+ {key:'调性',label:'调性'},{key:'年份',label:'年份'},{key:'流派',label:'曲风',aliases:['曲风']}
+];
+function musicFieldValue(tags:string[],field:{key:string;aliases?:string[]}){
+ for(const key of [field.key,...(field.aliases??[])]){
+  const found=tags.find(tag=>tag.startsWith(key+':'));
+  if(found)return found.slice(key.length+1).trim();
+ }
+ return '';
+}
 
 /** 一行的标签 + 右侧对齐值；值过长时省略，悬停看全文。 */
 function Row({label,value,mono}:{label:string;value:React.ReactNode;mono?:boolean}){
@@ -29,14 +41,15 @@ function Group({id,title,open,onToggle,action,children}:{id:Group;title:string;o
  * 素材详情栏：文件信息 / 我的标签 / 内嵌元数据 / AI 分类标签 / 原始文件位置 五段，
  * 每段可折叠；标签与元数据各自带编辑入口，不编辑时不占垂直空间。
  */
-export function AssetDetail({asset,onChanged,onCollapse}:{asset:CatalogAsset;onChanged:(patch:Partial<CatalogAsset>)=>void;onCollapse:()=>void}){
+export function AssetDetail({asset,library='sound',onChanged,onCollapse}:{asset:CatalogAsset;library?:'sound'|'music';onChanged:(patch:Partial<CatalogAsset>)=>void;onCollapse:()=>void}){
  const [open,setOpen]=useState<Record<Group,boolean>>(GROUPS);
  const [editing,setEditing]=useState(false);
  const [draft,setDraft]=useState(asset.tags.join('，'));
+ const [editingMusic,setEditingMusic]=useState(false),[musicDraft,setMusicDraft]=useState<Record<string,string>>({});
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  const {meta,metaError,reload}=useBwfMeta(asset.id);
 
- useEffect(()=>{setDraft(asset.tags.join('，'));setEditing(false);setError('');},[asset.id]);
+ useEffect(()=>{setDraft(asset.tags.join('，'));setEditing(false);setEditingMusic(false);setError('');},[asset.id]);
  useEffect(()=>{if(!asset.id)return;setOpen(GROUPS);},[asset.id]);
 
  const toggle=(id:Group)=>setOpen(old=>({...old,[id]:!old[id]}));
@@ -47,6 +60,17 @@ export function AssetDetail({asset,onChanged,onCollapse}:{asset:CatalogAsset;onC
    const tags=[...new Set(draft.split(/[,，;；\n]/).map(tag=>tag.trim()).filter(Boolean))];
    await invoke('catalog_set_tags',{id:asset.id,tags});
    setDraft(tags.join('，'));onChanged({tags});setEditing(false);
+  }catch(e){setError(String(e));}finally{setBusy(false);}
+ }
+ function beginMusic(){setMusicDraft(Object.fromEntries(MUSIC_FIELDS.map(field=>[field.key,musicFieldValue(asset.tags,field)])));setEditingMusic(true);}
+ async function saveMusic(){
+  setBusy(true);setError('');
+  try{
+   const keys=MUSIC_FIELDS.flatMap(field=>[field.key,...(field.aliases??[])]);
+   const kept=asset.tags.filter(tag=>!keys.some(key=>tag.startsWith(key+':')));
+   const added=MUSIC_FIELDS.filter(field=>musicDraft[field.key]?.trim()).map(field=>`${field.key}:${musicDraft[field.key].trim()}`);
+   const tags=[...new Set([...kept,...added])];
+   await invoke('catalog_set_tags',{id:asset.id,tags});onChanged({tags});setEditingMusic(false);
   }catch(e){setError(String(e));}finally{setBusy(false);}
  }
  async function toggleFavorite(){
@@ -76,6 +100,13 @@ export function AssetDetail({asset,onChanged,onCollapse}:{asset:CatalogAsset;onC
     <Row label="UCS 分类" value={meta?.ucs?.trim()||'—'}/>
    </dl>
   </Group>
+
+  {library==='music'&&<Group id="music" title="音乐信息" open={open.music} onToggle={toggle} action={<button className="detail-edit" onClick={()=>editingMusic?setEditingMusic(false):beginMusic()}>{editingMusic?'取消':'编辑'}</button>}>
+   {editingMusic?<div className="detail-music-editor">
+     {MUSIC_FIELDS.map(field=><label key={field.key}><span>{field.label}</span><input value={musicDraft[field.key]??''} maxLength={40} placeholder="未标注" disabled={busy} onChange={event=>setMusicDraft(old=>({...old,[field.key]:event.target.value}))}/></label>)}
+     <div className="detail-tag-actions"><button disabled={busy} onClick={()=>void saveMusic()}>{busy?'保存中…':'保存音乐信息'}</button><small>写为本机标签，原音频不改写。</small></div>
+    </div>:<dl className="detail-rows">{MUSIC_FIELDS.map(field=><Row key={field.key} label={field.label} value={musicFieldValue(asset.tags,field)||'—'}/>)}</dl>}
+  </Group>}
 
   <Group id="tags" title="我的标签" open={open.tags} onToggle={toggle} action={<button className="detail-edit" onClick={()=>{setEditing(value=>!value);setError('');}}>{editing?'取消':'编辑'}</button>}>
    {editing?<div className="detail-tag-editor">
