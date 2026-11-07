@@ -1,13 +1,13 @@
 # SFX Tools 交接文档（供新 Agent 接手）
 
-> 生成：2026-11-05，最后更新 2026-11-06。当前版本 **0.1.20**（SFX Tools；Cargo/npm 包名 `sfx-tools`；debug/no-bundle，已构建）。0.1.20 的完整交付记录见仓库 `handoff.md` 与知识库 `Documentation.md`。
+> 生成：2026-11-05，最后更新 2026-11-06。当前版本 **0.1.21**（SFX Tools；Cargo/npm 包名 `sfx-tools`；debug/no-bundle，已构建）。0.1.21 的完整交付记录见仓库 `handoff.md` 与知识库 `Documentation.md`，0.1.20 及更早批次作为沿革保留在下方各节。
 > 本文件自包含，新 agent 无需依赖历史对话或 WorkBuddy Skill 机制即可接手。
 
 ## 1. 项目定位与关键路径
 
 | 项 | 路径 |
 |---|---|
-| 工程仓库 | `D:/Ai-Files/Repos/GitHub/sound-workbench` |
+| 工程仓库 | `D:/Ai-Files/Repos/GitHub/sfx-tools` |
 | 知识库项目目录 | `D:/1-个人知识库_Vault/5-领域-A/06-软件制作/54-音效管理软件/02-音效管理软件重写/` |
 | **唯一当前状态入口** | 知识库 `Documentation.md`（不是本文件、不是聊天记录） |
 | 路线 | 知识库 `Plan.md`；执行约定 `Implement.md`；复盘 `24-市面音效库工具对标复盘与改进路线.md` |
@@ -15,7 +15,7 @@
 | 元数据适配 | 知识库 `26-BWF与iXML元数据适配.md` |
 | 评测方法 | 知识库 `27-中文相关性评测方法.md`；模板 `tests/cn-relevance-eval.template.json` |
 | 活待办看板 | `D:/1-个人知识库_Vault/6-资产-R/01-待办事项/待办清单.md` |
-| 交付 EXE | `src-tauri/target/debug/sfx-tools.exe`（0.1.20，25324544 字节，2026/11/06 13:01）；桌面 `SFX Tools.lnk` 直接指向它，重建即生效 |
+| 交付 EXE | `src-tauri/target/debug/sfx-tools.exe`（0.1.21，25329152 字节，2026/11/06 14:28）；桌面 `SFX Tools.lnk` 直接指向它，重建即生效 |
 | 交接 Skill（可选） | `C:/Users/Administrator/.workbuddy-ai/skills/sound-workbench-handover/`（SKILL.md + references/handover-state.md）；zip 同目录 |
 
 技术栈：Tauri 2 + React/TypeScript + Rust + SQLite/FTS5 + Python ONNX Runtime 桥（独立 CPU 推理）。
@@ -28,17 +28,18 @@
 4. **语义边界不可伪造**：文件齐备 / ONNX 张量自检 / `encode_text` / `encode_audio` 跑通，都不等于「音频语义检索可用」，也不等于「中文相关性评测通过」。评测工具已就位但**指标仍是零产出**；真实万条是正式发布闸门；十万条专项后置。
 5. 只调用本机独立 FFmpeg，不捆绑分发；不操作用户素材库内容（只读；元数据写回仅在用户点击保存时发生）。
 6. 提交必带身份：仓库与全局都没有配 `user.name/user.email`，`git commit` 需 `-c user.name=… -c user.email=…`；推送走代理 `-c http.proxy=http://127.0.0.1:7897`。
+7. **元数据检索不等于语义检索**：0.1.21 的 `meta_search` 只是 bext／iXML 字段拼接后的字符串索引，精确匹配、不分词、不接 CLAP 向量；不得借它宣称「语义检索已补齐」或「中文相关性评测达标」。搜索栏「含元数据」只覆盖本次使用，默认值只在设置页持久化。
 
 ## 3. 构建与测试命令
 
 ```powershell
 # 仓库根目录；verify.ps1 内置工具链环境与强制结束 EXE
-& 'D:\Ai-Files\Repos\GitHub\sound-workbench\verify.ps1' -Action test    # Rust 全量测试
-& 'D:\Ai-Files\Repos\GitHub\sound-workbench\verify.ps1' -Action build   # debug 构建 + 更新 EXE
+& 'D:\Ai-Files\Repos\GitHub\sfx-tools\verify.ps1' -Action test    # Rust 全量测试
+& 'D:\Ai-Files\Repos\GitHub\sfx-tools\verify.ps1' -Action build   # debug 构建 + 更新 EXE
 npm run build                                                          # 仅前端 tsc + Vite
 
 # Python 桥单测（须用 AI venv 解释器）
-& 'D:\Ai-Files\Tools\BuildEnv\sound-workbench-ai\Scripts\python.exe' tests/audio_text_bridge_test.py
+& 'D:\Ai-Files\Tools\BuildEnv\sfx-tools-ai\Scripts\python.exe' tests/audio_text_bridge_test.py
 
 # 前端波形调度器单测
 node --experimental-strip-types --test tests/waveform-data.test.mjs
@@ -48,10 +49,10 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 ```
 
 工具链环境（verify.ps1 已设）：
-- `CARGO_HOME=D:/Ai-Files/Tools/BuildEnv/sound-workbench-rust/cargo`
-- `RUSTUP_HOME=D:/Ai-Files/Tools/BuildEnv/sound-workbench-rust/rustup`
+- `CARGO_HOME=D:/Ai-Files/Tools/BuildEnv/sfx-tools-rust/cargo`
+- `RUSTUP_HOME=D:/Ai-Files/Tools/BuildEnv/sfx-tools-rust/rustup`
 - `RUSTUP_TOOLCHAIN=stable-x86_64-pc-windows-msvc`（Rust 1.99.1 MSVC）
-- Python venv：`D:/Ai-Files/Tools/BuildEnv/sound-workbench-ai/Scripts/python.exe`（3.12.10, numpy 2.3.4, onnxruntime 1.23.2, tokenizers 0.22.2）
+- Python venv：`D:/Ai-Files/Tools/BuildEnv/sfx-tools-ai/Scripts/python.exe`（3.12.10, numpy 2.3.4, onnxruntime 1.23.2, tokenizers 0.22.2）
 
 注意：`verify.ps1 -Action build` 在 PowerShell 工具里会因 node 写 stderr 抛 `NativeCommandError` 打断输出，但构建本身通常已完成；判定标准看 EXE 的 `LastWriteTime` 与 `ProductVersion`，不要只看命令是否报错。
 
@@ -69,7 +70,18 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 - 上游 `laion/clap-htsat-unfused` 为 Apache-2.0；`Xenova` 仓库**无 LICENSE、无 license 字段**，再分发需我们自行补齐声明（见 25 号审计「路线甲」）。
 - 长音频确定性取开头 480000 samples（10s），未与官方 `ClapFeatureExtractor` 逐帧对照。
 
-## 5. 0.1.20 已交付（本批）
+## 5. 0.1.21 已交付（本批）
+
+按人类「搜索栏跨语言按钮旁加『含元数据』开关，可在设置更改默认开启、可手动关」落地。事实核查先确认 0.1.20 既无按钮、也无 BWF/iXML 检索索引（关键词只匹配 `a.name || a.path || COALESCE(m.tags_search,'')`），因此做的是完整闭环，不是 UI 假开关。
+
+- **后端索引**：`catalog.rs` 增 `assets.meta_search TEXT` 兼容列（`NULL` = 旧库未索引、空串 = 已索引但无内嵌字段）；`metadata_search_text(path, format)` 只对 WAV 调 `bwf_metadata::read`，抽 bext 描述／制作者／参考号／日期时间与 iXML 的 PROJECT／SCENE／TAKE／TAPE／NOTE 及 `SW_` 私有字段，去控制字符、拼成一行、截到 `META_SEARCH_LIMIT = 4096` 字符。`record_file` 在新增／更新／旧库补索引时写入，尽量不重复解码；新增 `CatalogState::refresh_metadata_index(&self, id)`。
+- **检索开关**：`SearchFilter` 增 `metadata:bool`，`catalog_list` 增 `metadata:Option<bool>`；`search_page` 在打开时把 `COALESCE(a.meta_search,'')` 拼进关键词匹配式。跨语言扩展与标签／分类／格式／时长／收藏／播放列表筛选不受影响，用户输入仍全走 SQL 绑定参数。
+- **回写联动**：`bwf_write_metadata` 写盘成功后调 `refresh_metadata_index`，刷新失败不回滚音频、不掩盖写入成功，`WriteReport.rescan_required` 提示保留。
+- **前端两层状态**：`preferences.metadataSearch` 默认 `true`（旧存档缺字段也默认开，显式 `false` 才关）；`catalog.tsx` 的 `metadataOn` 是本次使用临时态，手动关不写 localStorage，设置改默认值时 `useEffect` 同步、重启按默认值恢复。搜索栏新增第二个 `.search-toggle` 按钮「含元数据」，`scopeKey`／`refresh` 纳入该状态；设置页「素材库」分类新增「检索时默认包含内嵌元数据」复选框与边界说明。
+- **验证**：`cargo check --all-targets --offline` 通过；全量 `cargo test --bin sfx-tools --offline` **176 通过 / 0 失败 / 6 忽略**（历史 flaky 用例本轮通过，仅增量编译锁目录删除告警）；新增 3 个 Rust 元数据单测；`npx tsc --noEmit` 通过，`tests/preferences.test.mjs` 2/2、波形单测 10/10；`verify.ps1 -Action build` 通过，EXE 0.1.21／25,329,152 字节／2026-11-06 14:28。CDP 实测 `app_version`=v0.1.21、两个搜索按钮初始都按下、手动关不改 localStorage 偏好、设置里关默认值后 reload 保持、`catalog_list` 接受 `metadata:true/false`；暗／亮共 7 张 `v21-*.png`。
+- **边界**：旧版本建立的素材库需重扫一次补齐 `meta_search`；只覆盖 WAV/BWF 的 bext／iXML 已知字段，MP3／FLAC／AIFF 无此内嵌字段（用户标签仍可搜）；`axml`／`chna`／`cart`／`ds64` 未解析；拼接文本不分词、不接语义向量。版本四处同步 0.1.21；工程仓本批未提交。
+
+### 0.1.20（上一批）
 
 按人类六张参考图与本批文字需求落地，中途人类追加裁决「波形显示全部，不能只显示片段」。
 
@@ -130,7 +142,7 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 - 阅读面二次对齐（`workspace-shell.css` 末尾「可读性基线」块）：表头 12px/30px、表体 12px/53px、`.asset-name strong` 13px、`.asset-name small` 11px、状态栏 11px/28px、导航项 35px，行高同步放大。列表每屏少约 1 行。
 - 字体栈：`--mono` 补中文回退并前置 Cascadia Mono（`'Cascadia Mono',Consolas,'Microsoft YaHei UI',monospace`），修掉路径列中文掉宋体的问题；`--body` 挂 `Segoe UI` 兜底。
 - 0.1.15 一并提交：`capabilities/main.json` 补 `core:app:allow-version` 并改用自有命令 `app_version()`；波形新增 `isMissingSourceError` 区分文件缺失与瞬时错误；`pinned_paths` 增 `color` 列、新增 `library_pin_color` 命令与右键六色板、常用路径移到侧栏底部常驻并默认展开。`.sidebar-pins` 本轮由 `column-reverse` 改回 `column`，标题回到列表上方。
-- 构建口径更正：`npm run tauri -- build` 必须带 `RUSTUP_HOME=D:/Ai-Files/Tools/BuildEnv/sound-workbench-rust/rustup` + `CARGO_HOME=.../cargo` + PATH `.../cargo/bin`，否则报 toolchain 未安装（默认 `RUSTUP_HOME` 是空的 `C:\Users\<用户>\.rustup`）。只改前端时增量构建 15–25 秒。
+- 构建口径更正：`npm run tauri -- build` 必须带 `RUSTUP_HOME=D:/Ai-Files/Tools/BuildEnv/sfx-tools-rust/rustup` + `CARGO_HOME=.../cargo` + PATH `.../cargo/bin`，否则报 toolchain 未安装（默认 `RUSTUP_HOME` 是空的 `C:\Users\<用户>\.rustup`）。只改前端时增量构建 15–25 秒。
 - 提交：`1ced5ad`，33 个文件，已推送 `origin/main`。`src-tauri/icons/icon.{ico,png}` 的候选图标仍在试验，未纳入提交。
 
 ### 0.1.13 更名与版本信息
@@ -153,7 +165,19 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 
 上一批 0.1.11（同样已在仓库）：CLAP 双塔语义检索（`semantic_vector.rs`）、波形「暂不可用」修复（`player.rs` Mutex 排队 + `waveform-data.ts` 退避重试）、模型下载队列与桥契约（`model_download.rs` / `audio_text.rs` / `audio_text_bridge.py`）。
 
-## 6. 验证结果（0.1.20）
+## 6. 验证结果（0.1.21 本批 / 0.1.20 历史）
+
+**0.1.21 本批**
+
+| 项 | 结果 |
+|---|---|
+| Rust | `cargo check --all-targets --offline` 通过；全量 `cargo test --bin sfx-tools --offline` **176 通过 / 0 失败 / 6 忽略**；新增 `metadata_toggle_only_adds_embedded_fields_to_text_search` / `metadata_text_extracts_bwf_fields_and_skips_non_wav` / `write_back_refreshes_metadata_index_for_search` 三项。历史 flaky 用例 `real_worker_cancel_resume_and_single_task_guard` 本轮显示 `ok`；「删除增量编译锁目录失败」告警不影响结果 |
+| 前端 | `npx tsc --noEmit` 通过；`node --experimental-strip-types --test tests/preferences.test.mjs` 2/2；`node --test tests/waveform-data.test.mjs` 10/10 |
+| CDP 端到端 | `app_version`=v0.1.21；两个 `.search-toggle`「跨语言」「含元数据」初始 `aria-pressed=true`、placeholder「…名称、路径、标签、元数据…」；手动关后按钮 `false`、placeholder 回退，localStorage `metadataSearch` 仍 `true`；设置页复选框默认勾选，改 `false` 后工具栏同步、reload 保持、恢复后同回 `true`；`catalog_list` 带 `metadata:true/false` 均被接受（空查询总数同为 2169）。暗／亮 7 张截图在 `D:/My-Temporary/sw-debug/v21-*.png` |
+| EXE | ProductVersion/FileVersion **0.1.21**，25,329,152 字节，2026/11/06 14:28:26；未生成安装包 |
+| 版本 | `package.json` / `src-tauri/Cargo.toml` / `Cargo.lock` / `tauri.conf.json` 四处同步；`package-lock.json` 仍为历史 0.1.16，按约定不动 |
+
+**0.1.20（历史）**
 
 | 项 | 结果 |
 |---|---|
@@ -173,8 +197,9 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 6. 0.1.20 新增未收口：长音频首次解码比旧的截断方案慢（靠缓存与预生成摊薄，未做 WAV PCM 直读快路径）；文件头时长缺失的异常输入仍退回 2400 万采样安全上限并标「前段」；`WAVE_CACHE_VERSION` 5→6 后旧片段缓存成为孤儿文件，可在设置页一次清空；6 张参考图只作视觉对照，未逐像素复刻。
 7. 待人类拍板：「按频谱着色」是否下线、列表小波形是否加高到 44–48px、三版候选图标定版、是否生成安装包。
 8. 更名只覆盖工程与应用界面；知识库历史文档里的旧名按存证保留。
+9. 0.1.21 新增未收口：旧库 `meta_search` 为 `NULL`，必须重扫一次才能参与检索（BWF/iXML 回写只刷新单条）；索引只覆盖 WAV/BWF 的 bext／iXML 已知字段，`axml`／`chna`／`cart`／`ds64` 与 MP3／FLAC／AIFF 容器标签未纳入；拼接文本不分词、不做字段权重、不接语义向量；CDP 截图尚未逐张人工目视复核。
 
-## 8. 续作顺序（0.1.20 之后）
+## 8. 续作顺序（0.1.21 之后）
 
 按 24 号复盘（`24-市面音效库工具对标复盘与改进路线.md`）的中期／战略项，确定性从高到低：
 
@@ -189,12 +214,13 @@ node --experimental-strip-types --test tests/waveform-data.test.mjs
 本文件不缓存 git 状态；每次接手第一步务必自己跑：
 
 ```bash
-git -C 'D:/Ai-Files/Repos/GitHub/sound-workbench' status --short
-git -C 'D:/Ai-Files/Repos/GitHub/sound-workbench' log --oneline -5
-git -C 'D:/Ai-Files/Repos/GitHub/sound-workbench' log origin/main --oneline -3
+git -C 'D:/Ai-Files/Repos/GitHub/sfx-tools' status --short
+git -C 'D:/Ai-Files/Repos/GitHub/sfx-tools' log --oneline -5
+git -C 'D:/Ai-Files/Repos/GitHub/sfx-tools' log origin/main --oneline -3
 ```
 
 - 0.1.20 基线提交是 `90d60bd`（0.1.19 列表列重构与音乐库筛选维度条）；**0.1.20 主提交 `b00d1af` 已推送 `origin/main`**（24 个文件、1837 insertions / 382 deletions），其后另有一笔文档状态补充提交。0.1.19 及更早批次早已推送。
+- **0.1.21 尚未提交**：工作区已修改 `package.json`、`src-tauri/Cargo.toml`、`Cargo.lock`、`tauri.conf.json`、`src-tauri/src/catalog.rs`、`bwf_metadata.rs`、`src/catalog.tsx`、`preferences.ts`、`settings.tsx`、`tests/preferences.test.mjs` 及本文档／README；另有不属于本批的 `src/sidebar-dock.css`／`sidebar-dock.tsx`（未跟踪）与 `src-tauri/icons/icon.ico`／`icon.png`。提交时只 `add` 涉案路径，勿用 `add -A`。
 - 0.1.20 涉及 21 个已跟踪文件与 5 个新文件（`src-tauri/src/multilingual.rs`、`src-tauri/src/settings_ops.rs`、`src/settings-client.ts`、`src/settings-panels.tsx`、`handoff.md`）。
 - `src-tauri/icons/icon.ico` / `icon.png` 有来源未确认的候选图标改动：按 0.1.16 起约定**继续留在工作区、不纳入任何批次提交**，等人类确认其来源与去留。
 - 提交需带身份 `-c user.name=… -c user.email=…`（仓库与全局都未配置），推送走代理 `-c http.proxy=http://127.0.0.1:7897`；**不自动提交知识库仓**（存在并行会话未提交中间态）。

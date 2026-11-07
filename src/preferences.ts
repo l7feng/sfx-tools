@@ -8,6 +8,8 @@ export type Preferences={
  rememberLayout:boolean;
  /** 搜索一种语言时同时命中中/英/日词表；公式与分类筛选不受影响。 */
  multilingualSearch:boolean;
+ /** 搜索默认一并匹配 WAV/BWF 内嵌的 bext / iXML 字段；搜索栏的「含元数据」按钮只在本次使用临时覆盖此默认值，不回写偏好。 */
+ metadataSearch:boolean;
  /** 列表小波形把整条音频压成一条单色包络（不分声道、峰值密度更低），并复用缓存减少重复解码。 */
  simpleWaveform:boolean;
  /** 打开音频工具页时自动折叠左栏/右栏/底栏，离开时恢复素材库布局。 */
@@ -20,7 +22,7 @@ export type Preferences={
 };
 export const defaultPreferences:Preferences={
  density:'compact',startPage:'sound',volume:15,waveColor:'blue',rememberLayout:true,
- multilingualSearch:true,simpleWaveform:true,collapseToolsPanels:true,
+ multilingualSearch:true,metadataSearch:true,simpleWaveform:true,collapseToolsPanels:true,
  auditionOnSelect:false,replaySameFromStart:true,stopOnDragToDaw:true,outputDevice:'default'
 };
 /** 旧存档缺字段时逐项兜底，避免升级后开关被静默重置成 false。 */
@@ -35,6 +37,7 @@ export function safePreferences(raw:unknown):Preferences{
   waveColor:value.waveColor==='white'?'white':'blue',
   rememberLayout:on('rememberLayout'),
   multilingualSearch:on('multilingualSearch'),
+  metadataSearch:on('metadataSearch'),
   simpleWaveform:on('simpleWaveform'),
   collapseToolsPanels:on('collapseToolsPanels'),
   auditionOnSelect:off('auditionOnSelect'),

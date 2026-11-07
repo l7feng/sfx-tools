@@ -1,6 +1,6 @@
 # SFX Tools（音效与音乐素材工作台）
 
-当前同步 0.1.20 开发源码，仅用于私有开发。可运行版本入口：`D:/Ai-Files/Repos/GitHub/sound-workbench/src-tauri/target/debug/sfx-tools.exe`（debug/no-bundle，非安装包）。源码构建及验证入口见下文。首次 Git 提交从本次源码快照开始，不包含本机素材库、账号数据及构建缓存。
+当前同步 0.1.21 开发源码，仅用于私有开发。可运行版本入口：`D:/Ai-Files/Repos/GitHub/sfx-tools/src-tauri/target/debug/sfx-tools.exe`（debug/no-bundle，非安装包，0.1.21／25,329,152 字节／2026-11-06 14:28）。源码构建及验证入口见下文。首次 Git 提交从本次源码快照开始，不包含本机素材库、账号数据及构建缓存。
 
 音效管理软件独立重写，开发代号。当前推进二三期功能及0.1.5底部工具/完整波形，实际验证与当前状态以知识库Documentation为准；下文旧阶段内容保留为历史记录。
 
@@ -239,3 +239,16 @@
 验收：`cargo check --all-targets` 通过；`cargo test --bin sfx-tools` 172 通过 / 1 失败 / 6 忽略，唯一失败为既有时间敏感用例 `catalog::real_worker_cancel_resume_and_single_task_guard`（用 0.1.19 HEAD 版 `catalog.rs` 对照重跑同样超时，0.1.18 验收记录里也标注过它，与本批无关）；`tsc --noEmit` 通过、前端波形单测 10/10、debug 构建通过。EXE 0.1.20，25,324,544 字节，2026/11/06 13:01（全长改动后最终重建）。CDP 实测：`app_version`=0.1.20；对库中 3534 秒（约 59 分钟）的素材分别取简化／完整波形，两者 `analyzed_duration` 均为 3534、`truncated=false`（512／4096 峰）；跨语言 `rain` 2→4 条、`雨` 2→4 条、`雨音` 0→4 条，`thunder`／`雷` 0→0（不伪造命中）；输出设备枚举出系统默认与 UR22C 等真实设备；数据备份实产出 2,150,400 字节 catalog 快照、`integrity=ok`。暗／亮两色 12 张截图核对设置四个新增面板与工具页折叠／恢复，无裁切。
 
 边界：全长解码使首次读取长音频比旧的 60 秒截断慢，靠缓存与设置页预生成摊薄；对包含大量长音频的库，批量预生成会明显耗时，可随时取消。文件头时长缺失的异常输入仍退回 2400 万采样安全上限，此时界面标「前段」。6 张参考图的视觉稿仅作对照，未逐像素复刻；「按频谱着色」是否下线、三版图标定版、安装包仍待人类拍板。
+
+## 0.1.21 内嵌元数据检索开关
+
+按人类「搜索栏跨语言按钮旁加『含元数据』开关，可在设置更改默认开启、可手动关」落地。核查确认 0.1.20 既没有这个按钮，也没把 BWF/iXML 写进检索列（关键词只匹配 `a.name || a.path || COALESCE(m.tags_search,'')`），因此做的是后端到前端的完整闭环，不是 UI 假开关。
+
+- **索引**：`catalog.rs` 增 `assets.meta_search TEXT`（`NULL` = 旧库未索引、空串 = 已索引但无内嵌字段）；`metadata_search_text` 只对 WAV 调 `bwf_metadata::read`，取 bext 描述／制作者／参考号／日期时间，以及 iXML 的 PROJECT／SCENE／TAKE／TAPE／NOTE 与 `SW_` 私有字段（项目、场景、条次、备注、分类、关键词、许可证、创作者、来源、UCS 等），去控制字符后拼成一行、截断 4096 字符。`record_file` 在新增／更新／旧库补索引时写入，尽量不重复解码音频。
+- **检索**：`SearchFilter` 增 `metadata:bool`，`catalog_list` 增 `metadata:Option<bool>`；开关打开时把 `COALESCE(a.meta_search,'')` 拼进关键词匹配式。跨语言扩展、标签／分类／格式／时长／收藏／播放列表筛选不受影响，用户输入仍全走 SQL 绑定参数。
+- **回写**：`bwf_write_metadata` 写盘成功后调 `CatalogState::refresh_metadata_index` 刷新单条索引；刷新失败不回滚音频、不掩盖写入成功。
+- **两层状态**：设置页 `preferences.metadataSearch` 是持久化默认值（默认开，旧存档缺字段也默认开）；搜索栏「含元数据」是本次使用临时开关，手动关不写回偏好，设置改默认值时工具栏同步、重启按默认值恢复。设置页「素材库」新增「检索时默认包含内嵌元数据」复选框，搜索栏第二个按钮复用已有 `.search-toggle` 样式。
+
+验收：`cargo check --all-targets` 通过；全量 `cargo test --bin sfx-tools` 176 通过 / 0 失败 / 6 忽略（新增 3 个元数据单测，历史 flaky 用例本轮通过）；`tsc --noEmit` 通过，`tests/preferences.test.mjs` 2/2、波形单测 10/10；`verify.ps1 -Action build` 通过，EXE 0.1.21／25,329,152 字节／2026-11-06 14:28。CDP 实测：`app_version`=v0.1.21；「跨语言」「含元数据」初始都按下，手动关后 placeholder 回退而 localStorage 默认值仍是 `true`；设置里关掉默认值后 reload 保持关闭；`catalog_list` 的 `metadata:true`／`false` 都被接受。暗／亮共 7 张 `v21-*.png`。版本四处同步 0.1.21。
+
+边界：**0.1.20 及更早建立的素材库需重扫一次**才能补齐 `meta_search`；BWF/iXML 回写只自动刷新当前这一条。只覆盖 WAV/BWF 的 bext／iXML 已知字段，MP3／FLAC／AIFF 没有这些内嵌字段（用户标签仍可搜），`axml`／`chna`／`cart`／`ds64` 未解析；索引是拼接单行文本，不分词、不做字段权重、不接语义向量。工程仓本批未提交，知识库仓按约定不自动提交。

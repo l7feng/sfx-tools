@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "SFX Tools",
-  "version": "0.1.20",
-  "identifier": "local.soundworkbench.desktop",
+  "version": "0.1.21",
+  "identifier": "local.sfxtools.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://127.0.0.1:5173",

@@ -20,7 +20,7 @@ export function Settings({open,onClose,value,onChange,onResetLayout,onOpenTool,l
  const dialog=useRef<HTMLDialogElement>(null),[tab,setTab]=useState('display');
  useEffect(()=>{const element=dialog.current;if(!element)return;if(open&&!element.open)element.showModal();else if(!open&&element.open)element.close();},[open]);
  const set=<K extends keyof Preferences>(key:K,item:Preferences[K])=>onChange({...value,[key]:item});
- const check=(key:'rememberLayout'|'simpleWaveform'|'collapseToolsPanels'|'multilingualSearch'|'auditionOnSelect'|'replaySameFromStart'|'stopOnDragToDaw',label:string,title:string)=>
+ const check=(key:'rememberLayout'|'simpleWaveform'|'collapseToolsPanels'|'multilingualSearch'|'metadataSearch'|'auditionOnSelect'|'replaySameFromStart'|'stopOnDragToDaw',label:string,title:string)=>
   <label className="checkbox-setting" title={title}><input type="checkbox" checked={value[key]} onChange={event=>set(key,event.target.checked)}/>{label}</label>;
  return <dialog ref={dialog} className="workspace-settings" onCancel={onClose} onClose={onClose} aria-labelledby="settings-title">
   <header><h2 id="settings-title">设置</h2><button onClick={onClose} aria-label="关闭设置">×</button></header>
@@ -54,7 +54,9 @@ export function Settings({open,onClose,value,onChange,onResetLayout,onOpenTool,l
      <h3>素材库</h3>
      <label>启动页面<select value={value.startPage} onChange={event=>set('startPage',event.target.value as Preferences['startPage'])}><option value="sound">音效库</option><option value="music">音乐库</option><option value="tools">音频工具</option></select></label>
      {check('multilingualSearch','跨语言搜索（中 / 英 / 日）','输一种语言，同时搜中/英/日同义词；公式、格式、分类、标签、时长、收藏与播放列表筛选都不受影响')}
+     {check('metadataSearch','检索时默认包含内嵌元数据','默认开启；搜索栏的「含元数据」按钮只在这次使用里临时关闭，下次启动按这里的默认值恢复。仅 WAV/BWF 的 bext 与 iXML 字段参与匹配，MP3、FLAC、AIFF 没有这些内嵌字段，标签仍照常可搜')}
      <p>本地静态词表，离线、不联网、不调用模型。词与词之间仍是「同时满足」，未登录词按字面匹配。</p>
+     <p>内嵌元数据索引在导入／重扫时建立，BWF／iXML 回写后自动刷新；旧版本建立的素材库需重扫一次才能参与检索。两个搜索开关可以叠加，格式、分类、标签、时长、收藏与播放列表筛选都不受影响。</p>
      <p>音效库和音乐库各自管理来源关系。相同文件可在两库引用，共用素材ID和标注；添加路径不会复制、移动或改写音频。</p>
     </>}
     {tab==='cache'&&(native?<><CacheSettings active={open} library={library} folder={folder}/><hr className="settings-divider"/><TempSettings active={open}/></>:<p>缓存与临时文件设置仅在桌面版可用。</p>)}

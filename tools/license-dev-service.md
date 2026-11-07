@@ -7,14 +7,14 @@
 在项目目录执行，运行数据留库外 `build/licensing-dev`：
 
 ```powershell
-python -B -X utf8 tools/license-dev-service.py --data-dir D:/Ai-Files/Repos/GitHub/sound-workbench/build/licensing-dev --port 48761
+python -B -X utf8 tools/license-dev-service.py --data-dir D:/Ai-Files/Repos/GitHub/sfx-tools/build/licensing-dev --port 48761
 ```
 
 该命令会持续运行，Ctrl+C结束。首次启动生成RSA2048密钥；私钥仅以当前Windows用户DPAPI加密形式保存在 `issuer-private.dpapi`，公钥为 `issuer-public.blob`。重开服务复用同一身份，不覆盖异常或不匹配的密钥。无需管理员权限，不修改系统服务或防火墙。
 
 ## 客户端开发流程
 
-1. 在软件“账号与买断授权”展开开发配置，填 `http://127.0.0.1:48761`，公钥路径填 `D:/Ai-Files/Repos/GitHub/sound-workbench/build/licensing-dev/issuer-public.blob`。这是手动选择开发信任来源，不接受凭证自带公钥。
+1. 在软件“账号与买断授权”展开开发配置，填 `http://127.0.0.1:48761`，公钥路径填 `D:/Ai-Files/Repos/GitHub/sfx-tools/build/licensing-dev/issuer-public.blob`。这是手动选择开发信任来源，不接受凭证自带公钥。
 2. 注册一个测试邮箱和至少12字符密码，再登录。账号/设备标识仅在本地；客户端不保存密码，登录会话只保留本次运行内存。
 3. 打开设备与订单，创建测试订单，模拟支付，激活本机。服务最多允许两台有效激活设备，解绑后可重新激活。
 4. 激活时，客户端使用固定公钥验证CNG RSA/SHA256签名，验证设备和发行信息后保存离线开发凭证；发行私钥不发送给客户端。

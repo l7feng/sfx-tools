@@ -447,8 +447,14 @@ pub async fn bwf_read_metadata(catalog: tauri::State<'_, crate::catalog::Catalog
 #[tauri::command]
 pub async fn bwf_write_metadata(catalog: tauri::State<'_, crate::catalog::CatalogState>, id: String, patch: MetadataPatch) -> Result<WriteReport, String> {
     let catalog = catalog.inner().clone();
-    let path = tauri::async_runtime::spawn_blocking(move || catalog.resolve_asset(&id)).await.map_err(err)??;
-    tauri::async_runtime::spawn_blocking(move || write(&path, &patch)).await.map_err(err)?
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = catalog.resolve_asset(&id)?;
+        let report = write(&path, &patch)?;
+        // 0.1.21：回写已落盘后同步刷新可检索索引。刷新失败不回滚音频、不掩盖写入成功，
+        // 报告里的 rescan_required 仍提示用户重扫以补齐其余登记字段。
+        let _ = catalog.refresh_metadata_index(&id);
+        Ok(report)
+    }).await.map_err(err)?
 }
 
 #[cfg(test)]
