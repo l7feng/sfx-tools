@@ -30,7 +30,7 @@ struct Active { id:String, cancel:Arc<AtomicBool>, progress:PathBuf, cancel_path
 struct Paths { python:PathBuf, model_dir:PathBuf, data_dir:PathBuf }
 impl Paths {
     fn new(data_dir:PathBuf)->Self{let repo=Path::new(env!("CARGO_MANIFEST_DIR")).join("..");Self{
-        python:PathBuf::from("D:/Ai-Files/Tools/BuildEnv/sound-workbench-ai/Scripts/python.exe"),
+        python:PathBuf::from("D:/Ai-Files/Tools/BuildEnv/sfx-tools-ai/Scripts/python.exe"),
         model_dir:repo.join("build/models/multilingual-e5-small"),data_dir,
     }}
     fn index(&self)->PathBuf{self.data_dir.join("index.sqlite")}

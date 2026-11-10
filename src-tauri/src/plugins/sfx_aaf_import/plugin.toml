@@ -1,0 +1,13 @@
+id = "sfx_aaf_import"
+version = "0.1.0"
+kind = "in_process_module"
+min_app_version = "0.1.25"
+component_epoch = 1
+feature_flag = "plugin-aaf-import"
+capabilities = ["reads_external_files", "reads_user_library"]
+requires_pt = false
+requires_test_project = true
+status = "read_only"
+entry_rust = "plugins::sfx_aaf_import"
+entry_ts = "plugins/sfx-aaf-import"
+rollout_percent = 100

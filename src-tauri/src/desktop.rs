@@ -2,20 +2,53 @@
 use std::{fs, path::PathBuf};
 
 pub fn startup_guard() -> Result<Option<fs::File>,String> {
-    let root=PathBuf::from(std::env::var_os("LOCALAPPDATA").ok_or("无法取得本机应用数据目录")?).join("local.soundworkbench.desktop");
+    let root=PathBuf::from(std::env::var_os("LOCALAPPDATA").ok_or("无法取得本机应用数据目录")?).join("local.sfxtools.desktop");
     fs::create_dir_all(&root).map_err(|e|e.to_string())?;
     match acquire_lock(root.join("startup.lock"))?{
         Some(file)=>Ok(Some(file)),
         None=>{
-            #[cfg(windows)] unsafe {
-                use windows::{core::w,Win32::UI::WindowsAndMessaging::*};
-                if let Ok(window)=FindWindowW(None,w!("SFX Tools · 素材目录")){
-                    let _=ShowWindow(window,SW_RESTORE);let _=SetForegroundWindow(window);
-                }else{message("SFX Tools 已在运行或正在启动，请切换到已有窗口。");}
+            #[cfg(windows)] {
+                use windows::Win32::UI::WindowsAndMessaging::*;
+                if let Some(window)=find_existing_window(){
+                    unsafe{let _=ShowWindow(window,SW_RESTORE);let _=SetForegroundWindow(window);}
+                }else{message("SFX TOOLS 已在运行或正在启动，请切换到已有窗口。");}
             }
             Ok(None)
         },
     }
+}
+
+// 标题随页面切换（SFX TOOLS · 音效库/音乐库/音频工具），精确匹配会失配；
+// 浏览器标签页可能同名，故前缀命中后再核对进程 exe 名。
+#[cfg(windows)]
+fn find_existing_window()->Option<windows::Win32::Foundation::HWND>{
+    use windows::{Win32::{Foundation::{CloseHandle,FALSE,HWND,LPARAM,TRUE},System::Threading::{OpenProcess,QueryFullProcessImageNameW,PROCESS_NAME_FORMAT,PROCESS_QUERY_LIMITED_INFORMATION},UI::WindowsAndMessaging::{EnumWindows,GetWindowTextW,GetWindowThreadProcessId}},core::{BOOL,PWSTR}};
+    struct Search{exe:String,found:Option<HWND>}
+    unsafe extern "system" fn inspect(window:HWND,param:LPARAM)->BOOL{
+        let search=&mut *(param.0 as *mut Search);
+        let mut title=[0u16;512];
+        let len=GetWindowTextW(window,&mut title);
+        if len<=0{return TRUE;}
+        if !String::from_utf16_lossy(&title[..len as usize]).starts_with("SFX TOOLS"){return TRUE;}
+        let mut pid=0u32;GetWindowThreadProcessId(window,Some(&mut pid));
+        if pid==0{return TRUE;}
+        if let Ok(process)=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,false,pid){
+            let mut buffer=[0u16;1024];let mut size=buffer.len() as u32;
+            if QueryFullProcessImageNameW(process,PROCESS_NAME_FORMAT(0),PWSTR(buffer.as_mut_ptr()),&mut size).is_ok(){
+                use std::os::windows::ffi::OsStringExt;
+                let path=std::path::PathBuf::from(std::ffi::OsString::from_wide(&buffer[..size as usize]));
+                if path.file_name().is_some_and(|name|name.to_string_lossy().to_lowercase()==search.exe){
+                    search.found=Some(window);let _=CloseHandle(process);return FALSE;
+                }
+            }
+            let _=CloseHandle(process);
+        }
+        TRUE
+    }
+    let exe=std::env::current_exe().ok()?.file_name()?.to_string_lossy().to_lowercase();
+    let mut search=Search{exe,found:None};
+    unsafe{let _=EnumWindows(Some(inspect),LPARAM(&mut search as *mut Search as isize));}
+    search.found
 }
 
 fn acquire_lock(path:PathBuf)->Result<Option<fs::File>,String>{
@@ -30,7 +63,7 @@ fn visible_path(path:&std::path::Path)->String{
 pub fn message(text:&str){
     #[cfg(windows)] unsafe{
         use windows::{core::HSTRING,Win32::UI::WindowsAndMessaging::*};
-        let _=MessageBoxW(None,&HSTRING::from(text),&HSTRING::from("SFX Tools"),MB_OK|MB_ICONINFORMATION);
+        let _=MessageBoxW(None,&HSTRING::from(text),&HSTRING::from("SFX TOOLS"),MB_OK|MB_ICONINFORMATION);
     }
     #[cfg(not(windows))] eprintln!("{text}");
 }

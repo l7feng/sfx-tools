@@ -35,7 +35,9 @@ pub struct PlaylistSummary{pub id:String,pub name:String,pub count:u64}
 #[derive(Serialize)]
 pub struct PinEntry{pub path:String,pub color:Option<String>}
 #[derive(Serialize)]
-pub struct LibraryOverview{pub tags:Vec<TagCount>,pub playlists:Vec<PlaylistSummary>,pub pins:Vec<PinEntry>,pub history_count:u64}
+pub struct FavoriteGroup{pub name:String,pub count:u64}
+#[derive(Serialize)]
+pub struct LibraryOverview{pub tags:Vec<TagCount>,pub playlists:Vec<PlaylistSummary>,pub pins:Vec<PinEntry>,pub history_count:u64,pub favorite_count:u64,pub favorite_ungrouped:u64,pub favorite_groups:Vec<FavoriteGroup>}
 fn overview(db:&Path,library:&str)->Result<LibraryOverview,String>{
     let library=validate_library(library)?;let mut conn=connection(db)?;let tx=conn.transaction().map_err(err)?;
     let mut counts:BTreeMap<String,u64>=BTreeMap::new();
@@ -51,7 +53,16 @@ fn overview(db:&Path,library:&str)->Result<LibraryOverview,String>{
         let rows=stmt.query_map([library],|r|Ok(PlaylistSummary{id:r.get(0)?,name:r.get(1)?,count:r.get(2)?})).map_err(err)?.collect::<Result<Vec<_>,_>>().map_err(err)?;rows};
     let pins={let mut stmt=tx.prepare("SELECT path,color FROM pinned_paths WHERE library=?1 ORDER BY created,path").map_err(err)?;let rows=stmt.query_map([library],|r|Ok(PinEntry{path:r.get(0)?,color:r.get(1)?})).map_err(err)?.collect::<Result<Vec<_>,_>>().map_err(err)?;rows};
     let history_count=tx.query_row("SELECT COUNT(*) FROM play_history h JOIN asset_libraries l ON h.asset_id=l.asset_id WHERE l.library=?1",[library],|r|r.get(0)).map_err(err)?;
-    tx.commit().map_err(err)?;Ok(LibraryOverview{tags,playlists,pins,history_count})
+    // 收藏分组：空串视作未分组，只统计当前库内仍存在的已收藏素材。
+    let mut group_counts:BTreeMap<String,u64>=BTreeMap::new();
+    {
+        let mut stmt=tx.prepare("SELECT COALESCE(TRIM(m.favorite_group),''),COUNT(*) FROM user_metadata m JOIN asset_libraries l ON l.asset_id=m.asset_id WHERE l.library=?1 AND COALESCE(m.favorite,0)=1 GROUP BY 1").map_err(err)?;
+        for row in stmt.query_map([library],|r|Ok((r.get::<_,String>(0)?,r.get::<_,u64>(1)?))).map_err(err)?{let (name,count)=row.map_err(err)?;*group_counts.entry(name).or_default()+=count;}
+    }
+    let favorite_count=group_counts.values().sum();
+    let favorite_ungrouped=group_counts.get("").copied().unwrap_or(0);
+    let favorite_groups=group_counts.into_iter().filter(|(name,_)|!name.is_empty()).map(|(name,count)|FavoriteGroup{name,count}).collect();
+    tx.commit().map_err(err)?;Ok(LibraryOverview{tags,playlists,pins,history_count,favorite_count,favorite_ungrouped,favorite_groups})
 }
 fn pin(db:&Path,library:&str,path:&str,pinned:bool)->Result<(),String>{
     let library=validate_library(library)?;let prefix=folder_prefix(Some(path))?.ok_or("请选择素材目录。")?;
@@ -245,6 +256,18 @@ mod tests{
         assert_eq!(conn.query_row::<u64,_,_>("SELECT COUNT(*) FROM play_history",[],|r|r.get(0)).unwrap(),500);
         assert!(!conn.query_row::<bool,_,_>("SELECT EXISTS(SELECT 1 FROM play_history WHERE asset_id='old-000')",[],|r|r.get(0)).unwrap());
         assert_eq!(search_page(&f.db,0,10,SearchFilter{history_only:true,..Default::default()}).unwrap().items[0].id,"latest");
+    }
+    #[test]
+    fn favorite_groups_are_counted_per_library_and_cleared_with_unfavorite(){
+        let f=Fixture::new();f.asset("one","a","sound");f.asset("two","ab","sound");f.asset("three","a","music");
+        set_favorite_group(&f.db,vec!["one".into(),"two".into(),"three".into()],Some("对白")).unwrap();
+        let sound=overview(&f.db,"sound").unwrap();
+        assert_eq!((sound.favorite_count,sound.favorite_ungrouped),(2,0));assert_eq!(sound.favorite_groups[0].name,"对白");assert_eq!(sound.favorite_groups[0].count,2);
+        assert_eq!(overview(&f.db,"music").unwrap().favorite_count,1);
+        set_favorite_group(&f.db,vec!["two".into()],None).unwrap();
+        let sound=overview(&f.db,"sound").unwrap();assert_eq!((sound.favorite_count,sound.favorite_ungrouped),(2,1));assert_eq!(sound.favorite_groups[0].count,1);
+        set_favorite(&f.db,"one",false).unwrap();
+        let sound=overview(&f.db,"sound").unwrap();assert_eq!((sound.favorite_count,sound.favorite_groups.len()),(1,0));assert_eq!(sound.favorite_ungrouped,1);
     }
     #[test]
     fn collections_removal_cascades_both_libraries_and_associations_preserves_disk_and_sibling(){

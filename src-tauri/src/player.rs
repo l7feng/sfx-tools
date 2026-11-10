@@ -136,8 +136,9 @@ impl PlaybackSource {
         let track=probed.format.default_track().ok_or("没有音频轨道")?;
         let params=&track.codec_params;
         let rate=params.sample_rate.ok_or("缺少采样率")?;
-        let channels=params.channels.ok_or("缺少声道信息")?.count() as u16;
-        if rate==0 || channels==0{return Err("音频规格无效".into());}
+        // AAC in MP4：声道配置可能只在首个可解码帧里，文件头给不出；先置0，由fill首帧认领。
+        let channels=params.channels.map(|value|value.count() as u16).unwrap_or(0);
+        if rate==0{return Err("音频规格无效".into());}
         let base=params.time_base.unwrap_or(symphonia::core::units::TimeBase::new(1,rate));
         let codec=symphonia::default::get_codecs().make(params,&Default::default()).map_err(|e|e.to_string())?;
         let mut source=Self{path:path.to_path_buf(),track:track.id,format:probed.format,codec,base,rate,channels,
@@ -161,6 +162,10 @@ impl PlaybackSource {
                 Err(error)=>{let message=format!("解码音频包失败：{error}");self.last_error=Some(message.clone());return Err(message);},
             };
             let spec=*decoded.spec();
+            if self.channels==0{
+                self.channels=spec.channels.count() as u16;
+                if self.channels==0{return Err(self.decode_failure("音频规格无效".into()));}
+            }
             if spec.rate!=self.rate || spec.channels.count()!=self.channels as usize{return Err(self.decode_failure("不支持播放中改变采样规格".into()));}
             let mut buffer=SampleBuffer::<f32>::new(decoded.capacity() as u64,spec);
             buffer.copy_interleaved_ref(decoded);
@@ -741,6 +746,21 @@ mod tests{
             assert!(reset.len()==full.len() && first_difference.is_none(),"{name}: seek0 len={} expected={} first_difference={:?} values={:?}",reset.len(),full.len(),first_difference,first_difference.map(|i|(reset[i],full[i])));
             source.try_seek(source.total_duration().unwrap()).unwrap();assert!(source.next().is_none(),"{name}: seek to end");
         }
+    }
+    #[test]
+    fn m4a_playback_decodes_seeks_and_reports_duration(){
+        let path=sample("aac-44100.m4a");let mut source=PlaybackSource::open(&path).unwrap();
+        assert_eq!(source.sample_rate(),44100);assert_eq!(source.channels(),1);
+        let duration=source.total_duration().unwrap().as_secs_f64();
+        assert!((0.45..=0.56).contains(&duration),"m4a duration {duration}");
+        let full:Vec<f32>=PlaybackSource::open(&path).unwrap().collect();
+        assert!((full.len() as f64/44100.0-0.5).abs()<0.06,"m4a decoded {} samples",full.len());
+        source.try_seek(Duration::from_secs_f64(0.25)).unwrap();
+        let tail:Vec<f32>=source.by_ref().collect();
+        assert!(!tail.is_empty()&&tail.len()<full.len(),"m4a seek should shorten remaining samples");
+        source.try_seek(Duration::ZERO).unwrap();let reset:Vec<f32>=source.by_ref().collect();
+        assert_eq!(reset.len(),full.len(),"m4a seek0 should restore full length");
+        source.try_seek(source.total_duration().unwrap()).unwrap();assert!(source.next().is_none(),"m4a seek to end");
     }
     struct TestDir(PathBuf);
     impl TestDir{fn new()->Self{let path=std::env::temp_dir().join(format!("sound-workbench-wave-test-{}",uuid::Uuid::new_v4()));fs::create_dir_all(&path).unwrap();Self(path)}}

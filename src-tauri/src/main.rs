@@ -23,6 +23,7 @@ mod workbench_jobs;
 mod bwf_metadata;
 mod multilingual;
 mod settings_ops;
+mod plugins;
 use tauri::Manager;
 
 #[tauri::command]
@@ -46,8 +47,15 @@ fn main() {
             let cache = settings_ops::init(app, &data).map_err(std::io::Error::other)?;
             let audio_text_dir = data.join("audio-text-v1");
             std::fs::create_dir_all(&audio_text_dir)?;
-            let state = catalog::CatalogState::new(data.join("catalog.sqlite"))
-                .map_err(std::io::Error::other)?;
+            // 旧版本与新版共用同一素材库；若旧版仍在运行会独占数据库。此时给出可读提示并干净退出，
+            // 而不是让 setup 返回错误被 Tauri 以 panic 收尾（表现为双击无反应）。
+            let state = match catalog::CatalogState::new(data.join("catalog.sqlite")) {
+                Ok(state) => state,
+                Err(error) => {
+                    desktop::message(&format!("无法打开素材数据库：{error}\n请先关闭其他正在运行的 SFX Tools 实例（含旧版本）后重新启动。"));
+                    std::process::exit(0);
+                }
+            };
             app.manage(state);
             app.manage(player::PlayerState::new());
             app.manage(full_wave::FullWaveState::new(cache.join("full-wave-v1")));
@@ -98,10 +106,12 @@ fn main() {
             folder_picker::catalog_pick_folder,
             folder_picker::settings_pick_folder,
             catalog::catalog_set_favorite,
+            catalog::catalog_set_favorite_group,
             catalog::catalog_set_tags,
             catalog::catalog_check_availability,
             catalog::catalog_prepare_fingerprint,
             catalog::catalog_relocate,
+            catalog::catalog_merge_assets,
             desktop::catalog_reveal,
             desktop::catalog_copy_paths,
             protools::protools_status,
@@ -124,6 +134,7 @@ fn main() {
             audio_tools::audio_tools_cancel,
             audio_tools::audio_tools_preview,
             audio_tools::audio_tools_export,
+            audio_tools::audio_clip_export,
             audio_index::audio_index_start,
             audio_index::audio_index_status,
             audio_index::audio_index_cancel,
@@ -174,7 +185,19 @@ fn main() {
             settings_ops::settings_output_devices,
             settings_ops::settings_player_set_device,
             settings_ops::settings_backup_list,
-            settings_ops::settings_backup_create
+            settings_ops::settings_backup_create,
+            plugins::sfx_aaf_import::plugin_sfx_aaf_import_parse,
+            plugins::sfx_aaf_import::plugin_sfx_aaf_import_candidates,
+            plugins::sfx_aaf_import::plugin_sfx_aaf_import_to_session,
+            plugins::sfx_pt_overlay::plugin_sfx_pt_overlay_capabilities,
+            plugins::sfx_pt_overlay::plugin_sfx_pt_overlay_spot,
+            plugins::sfx_pt_overlay::plugin_sfx_pt_overlay_status,
+            plugins::sfx_pt_bouncer::plugin_sfx_pt_bouncer_preview,
+            plugins::sfx_pt_bouncer::plugin_sfx_pt_bouncer_run,
+            plugins::sfx_pt_bouncer::plugin_sfx_pt_bouncer_cancel,
+            plugins::adapter::plugin_adapter_describe,
+            plugins::adapter::plugin_adapter_set_flags,
+            plugins::adapter::plugin_adapter_invoke
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 启动失败");

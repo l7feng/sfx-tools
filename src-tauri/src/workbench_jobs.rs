@@ -1,5 +1,6 @@
 //! 只读候选分析、原件副本导出与可选FFmpeg转换。所有输出都创建新文件。
 use crate::catalog::CatalogState;
+use rodio::Source;
 use serde::Serialize;use uuid::Uuid;use serde_json::{json,Value};use sha2::{Digest,Sha256};
 use std::{collections::{HashSet,BTreeMap},fs::{self,File,OpenOptions},io::{Read,Write},path::{Path,PathBuf},sync::{Arc,Mutex,atomic::{AtomicBool,Ordering}},process::{Command,Stdio},time::{UNIX_EPOCH,Duration,Instant}};
 fn err(e:impl std::fmt::Display)->String{e.to_string()}
@@ -13,6 +14,25 @@ fn asset(catalog:&CatalogState,id:&str)->Result<Asset,String>{let path=catalog.r
 fn unchanged(a:&Asset)->Result<(),String>{if identity(&a.path)?!=(a.size,a.modified.clone()){return Err("执行期间源文件已变化，未交付结果。".into());}Ok(())}
 fn ids(catalog:&CatalogState,selected:Vec<String>,library:&str)->Result<Vec<String>,String>{if !["sound","music"].contains(&library){return Err("素材库无效。".into());}let conn=rusqlite::Connection::open_with_flags(catalog.database_path(),rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(err)?;if selected.len()>500{return Err("一次最多处理500条已选素材。".into());}if !selected.is_empty(){let mut seen=HashSet::new();let mut result=vec![];for id in selected{if !seen.insert(id.clone()){continue;}let exists:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM asset_libraries WHERE asset_id=?1 AND library=?2)",rusqlite::params![id,library],|r|r.get(0)).map_err(err)?;if !exists{return Err("所选素材不属于当前库。".into());}result.push(id);}return Ok(result);}let mut stmt=conn.prepare("SELECT a.id FROM assets a JOIN asset_libraries l ON l.asset_id=a.id WHERE l.library=?1 AND a.status='ready' ORDER BY a.id LIMIT 100001").map_err(err)?;let result=stmt.query_map([library],|r|r.get(0)).map_err(err)?.collect::<Result<Vec<_>,_>>().map_err(err)?;if result.len()>100000{return Err("当前任务上限十万条，请缩小范围。".into());}Ok(result)}
 fn hash(a:&Asset,cancel:&AtomicBool)->Result<String,String>{let mut reader=File::open(&a.path).map_err(err)?;let mut buf=[0u8;65536];let mut hash=Sha256::new();loop{if cancel.load(Ordering::Acquire){return Err("任务已取消。".into());}let n=reader.read(&mut buf).map_err(err)?;if n==0{break;}hash.update(&buf[..n]);}unchanged(a)?;Ok(format!("{:x}",hash.finalize()))}
+/// 波形摘要：整段解码为采样流，连同采样率、声道与采样数一起哈希。
+/// 只认声音内容本身，容器/编码不同（如 WAV 与 M4A）但波形一致的文件得到同一摘要。
+/// 解码走 PlaybackSource（直接 symphonia）：rodio 0.20.1 的适配器在 M4A 初始化时会 panic。
+fn wave_hash(path:&Path,cancel:&AtomicBool)->Result<String,String>{
+ let mut decoder=crate::player::PlaybackSource::open(path).map_err(|e|format!("无法解码音频：{e}"))?;
+ let rate=decoder.sample_rate();let channels=decoder.channels();
+ if rate==0||channels==0{return Err("音频头返回无效采样率或声道数。".into());}
+ let mut digest=Sha256::new();
+ digest.update(rate.to_le_bytes());digest.update(channels.to_le_bytes());
+ let mut samples=0u64;
+ for sample in &mut decoder{
+  if cancel.load(Ordering::Acquire){return Err("任务已取消。".into());}
+  digest.update(sample.to_le_bytes());samples+=1;
+ }
+ // 中途解码失败时迭代器静默结束；不拦截会把「半段波形」当成完整摘要，误并不同文件。
+ if let Some(error)=decoder.decode_error(){return Err(format!("解码中断，未计入比较：{error}"));}
+ digest.update(samples.to_le_bytes());
+ Ok(format!("{:x}",digest.finalize()))
+}
 fn ffmpeg()->PathBuf{std::env::var_os("SOUND_WORKBENCH_FFMPEG").map(PathBuf::from).or_else(||option_env!("SW_FFMPEG_PATH").map(PathBuf::from)).unwrap_or_else(||PathBuf::from("ffmpeg.exe"))}
 fn child_command()->Command{let mut command=Command::new(ffmpeg());#[cfg(windows)]{use std::os::windows::process::CommandExt;command.creation_flags(0x08000000);}command}
 fn ffmpeg_run(source:&Path,target:&Path,filter:&str,rate:Option<u32>,cancel:&AtomicBool)->Result<(),String>{
@@ -30,10 +50,42 @@ fn export_batch(catalog:&CatalogState,selected:Vec<String>,library:&str,kind:&st
  if cancel.load(Ordering::Acquire){return Err("任务已取消。".into());}Ok(result)})();match operation{Ok(result)=>{created.0.clear();Ok(result)},Err(error)=>{let remaining=created.rollback();if remaining.is_empty(){Err(error)}else{Err(format!("{error}；以下新建文件清理失败，请核对：{}",remaining.join("；")))}}}
 }
 fn duplicate_groups(catalog:&CatalogState,selected:Vec<String>,library:&str,root:&Path,cancel:&AtomicBool,mut progress:impl FnMut(usize,usize))->Result<Vec<Value>,String>{let selected=ids(catalog,selected,library)?;fs::create_dir_all(root).map_err(err)?;let conn=rusqlite::Connection::open(root.join("hashes.sqlite")).map_err(err)?;conn.execute_batch("CREATE TABLE IF NOT EXISTS hashes(id TEXT PRIMARY KEY,path TEXT,size INTEGER,modified TEXT,digest TEXT)").map_err(err)?;let mut by_size=BTreeMap::<u64,Vec<Asset>>::new();for id in &selected{let a=asset(catalog,id)?;by_size.entry(a.size).or_default().push(a);}let total=selected.len();let mut processed=0;let mut groups=BTreeMap::<String,Vec<String>>::new();for (size,assets) in by_size{if assets.len()<2||size==0{processed+=assets.len();progress(processed,total);continue;}for a in assets{if cancel.load(Ordering::Acquire){return Err("任务已取消。".into());}use rusqlite::OptionalExtension;let old:Option<String>=conn.query_row("SELECT digest FROM hashes WHERE id=?1 AND path=?2 AND size=?3 AND modified=?4",rusqlite::params![a.id,a.path.to_string_lossy(),a.size,a.modified],|r|r.get(0)).optional().map_err(err)?;let digest=match old{Some(digest)=>{unchanged(&a)?;digest},None=>{let digest=hash(&a,cancel)?;conn.execute("INSERT OR REPLACE INTO hashes VALUES(?1,?2,?3,?4,?5)",rusqlite::params![a.id,a.path.to_string_lossy(),a.size,a.modified,digest]).map_err(err)?;digest}};groups.entry(digest).or_default().push(a.id);processed+=1;progress(processed,total);}}Ok(groups.into_iter().filter(|(_,ids)|ids.len()>1).map(|(digest,ids)|json!({"digest":digest,"count":ids.len(),"ids":ids})).collect())}
+/// 波形/时长级重复：先按（采样率、声道、毫秒时长）分组，组内整段解码比较波形摘要。
+/// 与 duplicate_groups 的字节级互为补充：跨容器/编码的同一声音也能成组。
+fn wave_duplicate_groups(catalog:&CatalogState,selected:Vec<String>,library:&str,root:&Path,cancel:&AtomicBool,mut progress:impl FnMut(usize,usize))->Result<Vec<Value>,String>{
+ let selected=ids(catalog,selected,library)?;
+ fs::create_dir_all(root).map_err(err)?;
+ let conn=rusqlite::Connection::open(root.join("hashes.sqlite")).map_err(err)?;
+ conn.execute_batch("CREATE TABLE IF NOT EXISTS wave_hashes(id TEXT PRIMARY KEY,path TEXT,size INTEGER,modified TEXT,digest TEXT)").map_err(err)?;
+ let db=rusqlite::Connection::open_with_flags(catalog.database_path(),rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(err)?;
+ use rusqlite::OptionalExtension;
+ let mut by_key:BTreeMap<(u32,u16,u64),Vec<Asset>>=BTreeMap::new();
+ let total=selected.len();let mut processed=0usize;
+ for id in &selected{
+  let profile:Option<(Option<u32>,Option<u16>,Option<f64>)>=db.query_row("SELECT rate,channels,duration FROM assets WHERE id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(err)?;
+  let Some((Some(rate),Some(channels),Some(duration)))=profile else{processed+=1;progress(processed,total);continue};
+  if !duration.is_finite()||duration<=0.0{processed+=1;progress(processed,total);continue;}
+  let a=asset(catalog,id)?;
+  by_key.entry((rate,channels,(duration*1000.0).round() as u64)).or_default().push(a);
+ }
+ let mut groups:BTreeMap<String,Vec<String>>=BTreeMap::new();
+ for assets in by_key.into_values(){
+  if assets.len()<2{processed+=assets.len();progress(processed,total);continue;}
+  for a in assets{
+   if cancel.load(Ordering::Acquire){return Err("任务已取消。".into());}
+   let path_text=a.path.to_string_lossy().into_owned();
+   let cached:Option<String>=conn.query_row("SELECT digest FROM wave_hashes WHERE id=?1 AND path=?2 AND size=?3 AND modified=?4",rusqlite::params![a.id,path_text,a.size,a.modified],|r|r.get(0)).optional().map_err(err)?;
+   let digest=match cached{Some(digest)=>{unchanged(&a)?;digest},None=>{let digest=wave_hash(&a.path,cancel)?;conn.execute("INSERT OR REPLACE INTO wave_hashes VALUES(?1,?2,?3,?4,?5)",rusqlite::params![a.id,path_text,a.size,a.modified,digest]).map_err(err)?;digest}};
+   groups.entry(digest).or_default().push(a.id);
+   processed+=1;progress(processed,total);
+  }
+ }
+ Ok(groups.into_iter().filter(|(_,ids)|ids.len()>1).map(|(digest,ids)|json!({"digest":digest,"count":ids.len(),"ids":ids,"wave":true})).collect())
+}
 fn plugins(folder:&str,cancel:&AtomicBool)->Result<Vec<Value>,String>{let root=safe_dir(Path::new(folder))?;let mut stack=vec![root];let mut result=vec![];let mut visited=0;while let Some(path)=stack.pop(){if cancel.load(Ordering::Acquire){return Err("任务已取消。".into());}visited+=1;if visited>100000{return Err("扫描超过十万目录项，请缩小插件目录。".into());}let meta=fs::symlink_metadata(&path).map_err(err)?;if is_link(&meta){continue;}let ext=path.extension().unwrap_or_default().to_string_lossy().to_lowercase();if ext=="vst3"||(meta.is_file()&&ext=="dll"){result.push(json!({"path":path,"format":if ext=="vst3"{"VST3"}else{"DLL候选"},"validated":false}));if result.len()>=2000{break;}continue;}if meta.is_dir(){for entry in fs::read_dir(path).map_err(err)?{stack.push(entry.map_err(err)?.path());}}}Ok(result)}
 impl WorkbenchJobsState{
  pub fn new(root:PathBuf)->Self{Self{root,inner:Arc::new(Mutex::new((JobStatus{status:"idle".into(),..Default::default()},None)))}}
- fn start(&self,catalog:CatalogState,kind:String,selected:Vec<String>,library:String,folder:Option<String>,rate:u32,factor:f64)->Result<String,String>{if !["duplicates","batch_export","resample","stretch","plugin_scan"].contains(&kind.as_str()){return Err("不支持的后台任务。".into());}let job_id=Uuid::new_v4().to_string();let cancel=Arc::new(AtomicBool::new(false));{let mut state=self.inner.lock().map_err(|_|"任务状态锁不可用")?;if state.1.is_some(){return Err("已有维护/导出任务运行。".into());}state.0=JobStatus{job_id:Some(job_id.clone()),kind:kind.clone(),library:library.clone(),status:"running".into(),..Default::default()};state.1=Some(cancel.clone());}let state=self.clone();let spawn=std::thread::Builder::new().name("sound-workbench-production".into()).spawn(move||{let result=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||{let update=|processed,total|{if let Ok(mut state)=state.inner.lock(){state.0.processed=processed;state.0.total=total;}};match kind.as_str(){"duplicates"=>duplicate_groups(&catalog,selected,&library,&state.root,&cancel,update),"plugin_scan"=>plugins(folder.as_deref().ok_or("请选择插件目录")?,&cancel),_=>export_batch(&catalog,selected,&library,&kind,folder.as_deref().ok_or("请选择目标目录")?,rate,factor,&cancel,update)}})).unwrap_or_else(|_|Err("后台任务异常退出，未宣称完成。".into()));if let Ok(mut inner)=state.inner.lock(){match result{Ok(items)=>{inner.0.items=items;inner.0.status="completed".into();},Err(error)=>{inner.0.status=if cancel.load(Ordering::Acquire){"cancelled"}else{"failed"}.into();inner.0.error=Some(error);}}inner.1=None;}});if let Err(e)=spawn{if let Ok(mut state)=self.inner.lock(){state.0.status="failed".into();state.0.error=Some(e.to_string());state.1=None;}return Err(e.to_string());}Ok(job_id)}
+ fn start(&self,catalog:CatalogState,kind:String,selected:Vec<String>,library:String,folder:Option<String>,rate:u32,factor:f64)->Result<String,String>{if !["duplicates","wave_duplicates","batch_export","resample","stretch","plugin_scan"].contains(&kind.as_str()){return Err("不支持的后台任务。".into());}let job_id=Uuid::new_v4().to_string();let cancel=Arc::new(AtomicBool::new(false));{let mut state=self.inner.lock().map_err(|_|"任务状态锁不可用")?;if state.1.is_some(){return Err("已有维护/导出任务运行。".into());}state.0=JobStatus{job_id:Some(job_id.clone()),kind:kind.clone(),library:library.clone(),status:"running".into(),..Default::default()};state.1=Some(cancel.clone());}let state=self.clone();let spawn=std::thread::Builder::new().name("sound-workbench-production".into()).spawn(move||{let result=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||{let update=|processed,total|{if let Ok(mut state)=state.inner.lock(){state.0.processed=processed;state.0.total=total;}};match kind.as_str(){"duplicates"=>duplicate_groups(&catalog,selected,&library,&state.root,&cancel,update),"wave_duplicates"=>wave_duplicate_groups(&catalog,selected,&library,&state.root,&cancel,update),"plugin_scan"=>plugins(folder.as_deref().ok_or("请选择插件目录")?,&cancel),_=>export_batch(&catalog,selected,&library,&kind,folder.as_deref().ok_or("请选择目标目录")?,rate,factor,&cancel,update)}})).unwrap_or_else(|_|Err("后台任务异常退出，未宣称完成。".into()));if let Ok(mut inner)=state.inner.lock(){match result{Ok(items)=>{inner.0.items=items;inner.0.status="completed".into();},Err(error)=>{inner.0.status=if cancel.load(Ordering::Acquire){"cancelled"}else{"failed"}.into();inner.0.error=Some(error);}}inner.1=None;}});if let Err(e)=spawn{if let Ok(mut state)=self.inner.lock(){state.0.status="failed".into();state.0.error=Some(e.to_string());state.1=None;}return Err(e.to_string());}Ok(job_id)}
 }
 #[derive(Serialize)]pub struct Suggestion{pub cat_id:String,pub category:String,pub subcategory:String,pub score:u32,pub reason:String}
 fn term_match(text:&str,token:&str)->bool{if token.is_ascii(){text.match_indices(token).any(|(index,_)|{let end=index+token.len();(index==0||!text.as_bytes()[index-1].is_ascii_alphanumeric())&&(end==text.len()||!text.as_bytes()[end].is_ascii_alphanumeric())})}else{text.contains(token)}}

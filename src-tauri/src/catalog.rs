@@ -1,9 +1,9 @@
 //! 只读引用音频的本地目录。扫描不移动、删除或改写源文件。
-use rodio::{Decoder, Source};
+use rodio::Source;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use sha2::{Digest,Sha256};
-use std::{collections::BTreeMap, fs, io::{BufReader,Read}, path::{Path, PathBuf}, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}, time::{Duration, SystemTime, UNIX_EPOCH}};
+use std::{collections::BTreeMap, fs, io::Read, path::{Path, PathBuf}, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}, time::{Duration, SystemTime, UNIX_EPOCH}};
 use uuid::Uuid;
 
 const SCHEMA_VERSION: i64 = 1;
@@ -26,7 +26,7 @@ pub struct CatalogItem {
     pub id: String, pub path: String, pub name: String, pub format: String,
     pub size: u64, pub modified: String, pub rate: Option<u32>, pub channels: Option<u16>,
     pub duration: Option<f64>, pub status: String, pub error: Option<String>,
-    pub favorite: bool, pub tags: Vec<String>,
+    pub favorite: bool, pub favorite_group: Option<String>, pub tags: Vec<String>,
 }
 #[derive(Debug, Serialize)]
 pub struct CatalogPage { pub items: Vec<CatalogItem>, pub total: u64 }
@@ -56,6 +56,16 @@ fn connection(path: &Path) -> Result<Connection, String> {
 
 impl CatalogState {
     pub fn database_path(&self)->PathBuf { self.inner.db_path.clone() }
+    /// 0.1.21：元数据回写后同步刷新可检索文本；只重读容器头，不解码音频。
+    pub fn refresh_metadata_index(&self,id:&str)->Result<(),String>{
+        let path=self.resolve_asset(id)?;
+        let format=audio_format(&path).unwrap_or_default();
+        let text=metadata_search_text(&path,&format);
+        let conn=connection(&self.inner.db_path)?;
+        let changed=conn.execute("UPDATE assets SET meta_search=?2 WHERE id=?1",params![id,text]).map_err(err)?;
+        if changed==0{return Err("素材不存在，元数据索引未更新。".into());}
+        Ok(())
+    }
     pub fn record_played(&self,id:&str)->Result<(),String>{library_tools::record_history(&self.inner.db_path,id)}
     pub fn new(db_path: PathBuf) -> Result<Self, String> {
         if let Some(parent) = db_path.parent() { fs::create_dir_all(parent).map_err(err)?; }
@@ -93,6 +103,21 @@ impl CatalogState {
             CREATE TABLE IF NOT EXISTS asset_fingerprints (
                 asset_id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
                 sha256 TEXT NOT NULL, size INTEGER NOT NULL, modified TEXT NOT NULL, prepared_at TEXT NOT NULL);").map_err(err)?;
+        // 0.1.24：收藏分组。空串与 NULL 都表示未分组；取消收藏时一并清空。
+        {
+            let has_group=conn.prepare("PRAGMA table_info(user_metadata)").map_err(err)?
+                .query_map([],|r|r.get::<_,String>(1)).map_err(err)?
+                .collect::<Result<Vec<_>,_>>().map_err(err)?.iter().any(|name|name=="favorite_group");
+            if !has_group{conn.execute_batch("ALTER TABLE user_metadata ADD COLUMN favorite_group TEXT;").map_err(err)?;}
+        }
+        // 0.1.21：内嵌元数据的可检索文本。NULL=尚未索引，空串=已索引但无内嵌字段；
+        // 旧库升级后 NULL 记录会在下次重扫时补齐，不把「没扫过」误当成「没有元数据」。
+        {
+            let has_meta_search=conn.prepare("PRAGMA table_info(assets)").map_err(err)?
+                .query_map([],|r|r.get::<_,String>(1)).map_err(err)?
+                .collect::<Result<Vec<_>,_>>().map_err(err)?.iter().any(|name|name=="meta_search");
+            if !has_meta_search{conn.execute_batch("ALTER TABLE assets ADD COLUMN meta_search TEXT;").map_err(err)?;}
+        }
         {
             let tx=conn.transaction().map_err(err)?;
             tx.execute_batch("CREATE TABLE IF NOT EXISTS asset_libraries (
@@ -220,13 +245,33 @@ fn preview_root(root:&str) -> Result<String,String> {
 }
 fn audio_format(path:&Path) -> Option<String> {
     let ext=path.extension()?.to_str()?.to_ascii_uppercase();
-    match ext.as_str() { "WAV"|"FLAC"|"MP3" => Some(ext), "AIFF"|"AIF" => Some("AIFF".into()), _=>None }
+    match ext.as_str() { "WAV"|"FLAC"|"MP3"|"M4A" => Some(ext), "AIFF"|"AIF" => Some("AIFF".into()), _=>None }
+}
+/// 0.1.21：把 WAV/BWF 内嵌元数据压成一行可检索文本。
+/// 非 RIFF/WAVE 与读取失败一律返回空串，不阻断导入；只取已知字段，不解析未知厂商块。
+const META_SEARCH_LIMIT: usize = 4096;
+fn metadata_search_text(path:&Path,format:&str)->String{
+    if format!="WAV"{return String::new();}
+    let meta=match crate::bwf_metadata::read(path){Ok(value)=>value,Err(_)=>return String::new()};
+    let fields=[meta.description,meta.originator,meta.originator_reference,meta.origination_date,meta.origination_time,
+        meta.project,meta.scene,meta.take,meta.tape,meta.note,meta.category,meta.keywords,meta.license,meta.creator,meta.source,meta.ucs];
+    let mut text=String::new();
+    for field in fields{
+        let clean:String=field.chars().filter(|ch|!ch.is_control()).collect();
+        let clean=clean.trim();
+        if clean.is_empty(){continue;}
+        if !text.is_empty(){text.push(' ');}
+        text.push_str(clean);
+        if text.chars().count()>=META_SEARCH_LIMIT{break;}
+    }
+    text.chars().take(META_SEARCH_LIMIT).collect()
 }
 fn metadata_audio(path:&Path) -> Result<(u32,u16,Option<f64>),String> {
-    let decoder=Decoder::new(BufReader::new(fs::File::open(path).map_err(err)?)).map_err(|e|format!("无法识别音频：{e}"))?;
-    let rate=decoder.sample_rate(); let channels=decoder.channels();
+    // 与播放共用同一解码入口：rodio 0.20.1 的 symphonia 适配器在 M4A 初始化时会触发
+    // unreachable panic，且其 total_duration 换算有缺陷（见 duration.rs）。
+    let source=crate::player::PlaybackSource::open(path).map_err(|e|format!("无法识别音频：{e}"))?;
+    let rate=source.sample_rate(); let channels=source.channels();
     if rate == 0 || channels == 0 { return Err("音频头返回无效采样率或声道数。".into()); }
-    // 不用 decoder.total_duration()：rodio 0.20.1 在 symphonia 分支把 frac 取倒数，见 duration.rs。
     Ok((rate,channels,crate::duration::seconds(path)))
 }
 fn save_progress(conn:&Connection,job:&ImportJob) -> Result<(),String> {
@@ -243,10 +288,16 @@ fn record_file(conn:&Connection,path:&Path,format:&str,job:&mut ImportJob) -> Re
     let metadata=fs::metadata(&canonical).map_err(err)?;
     let size=metadata.len();
     let modified=metadata.modified().map_err(err)?.duration_since(UNIX_EPOCH).map_err(err)?.as_nanos().to_string();
-    let old:Option<(String,u64,String,String,Option<f64>)>=conn.query_row("SELECT id,size,modified,status,duration FROM assets WHERE path_key=?1",[&key],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).optional().map_err(err)?;
+    let old:Option<(String,u64,String,String,Option<f64>,Option<String>)>=conn.query_row("SELECT id,size,modified,status,duration,meta_search FROM assets WHERE path_key=?1",[&key],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?))).optional().map_err(err)?;
     // 文件未变且已有可用时长才跳过；时长为空说明需要按文件头补算（含旧版错误值被清空后的重扫）。
-    if old.as_ref().is_some_and(|(_,bytes,mtime,status,duration)|*bytes==size && mtime==&modified && status=="ready" && duration.is_some()) {
-        conn.execute("INSERT OR IGNORE INTO asset_libraries(asset_id,library) VALUES(?1,?2)",params![old.as_ref().unwrap().0,validate_library(&job.library)?]).map_err(err)?;
+    if old.as_ref().is_some_and(|(_,bytes,mtime,status,duration,_)|*bytes==size && mtime==&modified && status=="ready" && duration.is_some()) {
+        let (id,_,_,_,_,indexed)=old.as_ref().unwrap();
+        // 旧库升级后 meta_search 为 NULL：只补内嵌元数据索引，不重新解码音频。
+        if indexed.is_none(){
+            let text=metadata_search_text(&canonical,format);
+            conn.execute("UPDATE assets SET meta_search=?2 WHERE id=?1",params![id.as_str(),text]).map_err(err)?;
+        }
+        conn.execute("INSERT OR IGNORE INTO asset_libraries(asset_id,library) VALUES(?1,?2)",params![id.as_str(),validate_library(&job.library)?]).map_err(err)?;
         job.skipped+=1;return Ok(());
     }
     let (rate,channels,duration,status,error)=match metadata_audio(&canonical) {
@@ -256,19 +307,20 @@ fn record_file(conn:&Connection,path:&Path,format:&str,job:&mut ImportJob) -> Re
     // 不将分析期间发生变化的元数据写成就绪；下次恢复可重试。
     let after=fs::metadata(&canonical).map_err(err)?;
     if after.len()!=size || after.modified().map_err(err)?!=metadata.modified().map_err(err)? { return Err("分析期间文件发生变化，请重新扫描。".into()); }
+    let meta_text=metadata_search_text(&canonical,format);
     let id=old.as_ref().map(|a|a.0.clone()).unwrap_or_else(||Uuid::new_v4().to_string());
     let name=canonical.file_name().and_then(|n|n.to_str()).ok_or("文件名无法表示为Unicode")?;
     let library=validate_library(&job.library)?;
     // 素材更新、归属登记与过期指纹失效一起提交，进程中断不留下无归属的新素材。
     let tx=conn.unchecked_transaction().map_err(err)?;
-    tx.execute("INSERT INTO assets(id,path_key,path,name,format,size,modified,rate,channels,duration,status,error)
-        VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)
+    tx.execute("INSERT INTO assets(id,path_key,path,name,format,size,modified,rate,channels,duration,status,error,meta_search)
+        VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)
         ON CONFLICT(path_key) DO UPDATE SET path=excluded.path,name=excluded.name,format=excluded.format,
         size=excluded.size,modified=excluded.modified,rate=excluded.rate,channels=excluded.channels,
-        duration=excluded.duration,status=excluded.status,error=excluded.error",
-        params![id,key,path_text,name,format,size,modified,rate,channels,duration,status,error]).map_err(err)?;
+        duration=excluded.duration,status=excluded.status,error=excluded.error,meta_search=excluded.meta_search",
+        params![id,key,path_text,name,format,size,modified,rate,channels,duration,status,error,meta_text]).map_err(err)?;
     tx.execute("INSERT OR IGNORE INTO asset_libraries(asset_id,library) VALUES(?1,?2)",params![id,library]).map_err(err)?;
-    if old.as_ref().is_some_and(|(_,bytes,mtime,_,_)|*bytes!=size||mtime!=&modified){
+    if old.as_ref().is_some_and(|(_,bytes,mtime,_,_,_)|*bytes!=size||mtime!=&modified){
         tx.execute("DELETE FROM asset_fingerprints WHERE asset_id=?1",[&id]).map_err(err)?;
     }
     tx.commit().map_err(err)?;
@@ -356,7 +408,7 @@ fn folder_nodes_in_library(db:&Path,library:Option<&str>)->Result<Vec<FolderNode
     Ok(nodes.into_values().collect())
 }
 #[derive(Default)]
-struct SearchFilter<'a>{folder:Option<&'a str>,query:Option<&'a str>,format:Option<&'a str>,sort:Option<&'a str>,favorites_only:bool,library:Option<&'a str>,tag:Option<&'a str>,tags:Vec<String>,history_only:bool,playlist_id:Option<&'a str>,min_duration:Option<f64>,max_duration:Option<f64>,multilingual:bool}
+struct SearchFilter<'a>{folder:Option<&'a str>,query:Option<&'a str>,format:Option<&'a str>,sort:Option<&'a str>,favorites_only:bool,favorite_group:Option<&'a str>,favorite_ungrouped:bool,library:Option<&'a str>,tag:Option<&'a str>,tags:Vec<String>,history_only:bool,playlist_id:Option<&'a str>,min_duration:Option<f64>,max_duration:Option<f64>,multilingual:bool,metadata:bool,ready_only:bool}
 fn search_page(db:&Path,offset:usize,limit:usize,filter:SearchFilter<'_>)->Result<CatalogPage,String>{
     use rusqlite::types::Value;
     let query=filter.query.unwrap_or("");
@@ -364,7 +416,7 @@ fn search_page(db:&Path,offset:usize,limit:usize,filter:SearchFilter<'_>)->Resul
     let words:Vec<_>=query.split_whitespace().collect();
     if words.len()>32{return Err("搜索词不能超过32个。".into());}
     let format=filter.format.filter(|s|!s.is_empty()&&*s!="全部格式").map(str::to_ascii_uppercase);
-    if format.as_deref().is_some_and(|s|!["WAV","AIFF","FLAC","MP3"].contains(&s)){return Err("不支持的格式筛选。".into());}
+    if format.as_deref().is_some_and(|s|!["WAV","AIFF","FLAC","MP3","M4A"].contains(&s)){return Err("不支持的格式筛选。".into());}
     // 排序表达式只来自白名单；用户输入均用绑定参数。
     let order=match filter.sort.unwrap_or("name"){
         "name"=>"a.name COLLATE NOCASE,a.id",
@@ -377,12 +429,21 @@ fn search_page(db:&Path,offset:usize,limit:usize,filter:SearchFilter<'_>)->Resul
     };
     let order=if filter.history_only{"(SELECT h.played_at FROM play_history h WHERE h.asset_id=a.id) DESC,a.id"}else{order};
     let mut conditions=vec!["1=1".to_string()];let mut values:Vec<Value>=Vec::new();
+    // 隐藏不可用素材：与关键词、格式、收藏等条件同批进入 SQL，COUNT 与分页共用同一 predicate。
+    if filter.ready_only{conditions.push("a.status='ready'".into());}
     if let Some(library)=filter.library{values.push(Value::Text(validate_library(library)?.to_owned()));conditions.push(format!("EXISTS(SELECT 1 FROM asset_libraries l WHERE l.asset_id=a.id AND l.library=?{})",values.len()));}
     if let Some(prefix)=folder_prefix(filter.folder)?{
         values.push(Value::Text(prefix));let n=values.len();conditions.push(format!("substr(a.path,1,length(?{n}))=?{n}"));
     }
     if let Some(format)=format{values.push(Value::Text(format));conditions.push(format!("a.format=?{}",values.len()));}
     if filter.favorites_only{conditions.push("COALESCE(m.favorite,0)=1".into());}
+    // 收藏分组：分组筛选只作用于已收藏素材；未分组按空串/NULL 判定。
+    if let Some(group)=filter.favorite_group.filter(|s|!s.is_empty()){
+        if group.chars().count()>40 || group.chars().any(char::is_control){return Err("收藏分组筛选内容无效。".into());}
+        values.push(Value::Text(group.to_owned()));
+        conditions.push(format!("(COALESCE(m.favorite,0)=1 AND m.favorite_group=?{})",values.len()));
+    }
+    if filter.favorite_ungrouped{conditions.push("(COALESCE(m.favorite,0)=1 AND COALESCE(m.favorite_group,'')='')".into());}
     // 时长区间：素材库里时长未知的记录一律不计入区间结果，避免"未知"混进 0 秒。
     if let Some(min)=filter.min_duration.filter(|value|value.is_finite()&&*value>0.0){
         values.push(Value::Real(min));conditions.push(format!("a.duration IS NOT NULL AND a.duration>=?{}",values.len()));
@@ -409,13 +470,20 @@ fn search_page(db:&Path,offset:usize,limit:usize,filter:SearchFilter<'_>)->Resul
     // 跨语言扩展只作用于普通文本关键词：同一词的候选之间 OR，词与词之间仍是 AND。
     // 上面的标签/分类/格式/时长/收藏/播放列表等条件各自独立生成，完全不受扩展影响；
     // 所有候选词依旧走绑定参数，不拼进 SQL 文本。
+    // 「含元数据」开启才把路径、标签与内嵌元数据并入可检索文本；关闭时只匹配文件名。
+    // 拼接的只有固定列名，用户输入仍全部走绑定参数，标签/分类/格式/时长/收藏/播放列表条件也不受影响。
+    let searchable=if filter.metadata{
+        "a.name || ' ' || a.path || ' ' || COALESCE(m.tags_search,'') || ' ' || COALESCE(a.meta_search,'')"
+    }else{
+        "a.name"
+    };
     let expanded=if filter.multilingual{crate::multilingual::expand_query(&words)}else{words.iter().map(|word|vec![word.to_ascii_lowercase()]).collect::<Vec<Vec<String>>>()};
     for variants in expanded{
         let mut alternatives=Vec::with_capacity(variants.len());
         for variant in variants{
             // SQLite内建lower覆盖ASCII拉丁字母，中文保持原字；instr按字面匹配%/_及引号。
             values.push(Value::Text(variant));
-            alternatives.push(format!("instr(lower(a.name || ' ' || a.path || ' ' || COALESCE(m.tags_search,'')),?{})>0",values.len()));
+            alternatives.push(format!("instr(lower({searchable}),?{})>0",values.len()));
         }
         conditions.push(format!("({})",alternatives.join(" OR ")));
     }
@@ -425,12 +493,13 @@ fn search_page(db:&Path,offset:usize,limit:usize,filter:SearchFilter<'_>)->Resul
     let total=tx.query_row(&format!("SELECT COUNT(*){from}WHERE {predicate}"),rusqlite::params_from_iter(values.iter()),|r|r.get(0)).map_err(err)?;
     values.push(Value::Integer(limit.clamp(1,500) as i64));let limit_parameter=values.len();
     values.push(Value::Integer(offset.min(i64::MAX as usize) as i64));let offset_parameter=values.len();
-    let sql=format!("SELECT a.id,a.path,a.name,a.format,a.size,a.modified,a.rate,a.channels,a.duration,a.status,a.error,COALESCE(m.favorite,0),COALESCE(m.tags,'[]'){from}WHERE {predicate} ORDER BY {order} LIMIT ?{limit_parameter} OFFSET ?{offset_parameter}");
+    let sql=format!("SELECT a.id,a.path,a.name,a.format,a.size,a.modified,a.rate,a.channels,a.duration,a.status,a.error,COALESCE(m.favorite,0),COALESCE(m.tags,'[]'),COALESCE(m.favorite_group,''){from}WHERE {predicate} ORDER BY {order} LIMIT ?{limit_parameter} OFFSET ?{offset_parameter}");
     let mut stmt=tx.prepare(&sql).map_err(err)?;
     let items=stmt.query_map(rusqlite::params_from_iter(values.iter()),|r|{
         let raw:String=r.get(12)?;
         let tags=serde_json::from_str(&raw).map_err(|e|rusqlite::Error::FromSqlConversionFailure(12,rusqlite::types::Type::Text,Box::new(e)))?;
-        Ok(CatalogItem{id:r.get(0)?,path:r.get(1)?,name:r.get(2)?,format:r.get(3)?,size:r.get(4)?,modified:r.get(5)?,rate:r.get(6)?,channels:r.get(7)?,duration:r.get(8)?,status:r.get(9)?,error:r.get(10)?,favorite:r.get(11)?,tags})
+        let group:String=r.get(13)?;
+        Ok(CatalogItem{id:r.get(0)?,path:r.get(1)?,name:r.get(2)?,format:r.get(3)?,size:r.get(4)?,modified:r.get(5)?,rate:r.get(6)?,channels:r.get(7)?,duration:r.get(8)?,status:r.get(9)?,error:r.get(10)?,favorite:r.get(11)?,favorite_group:if group.is_empty(){None}else{Some(group)},tags})
     }).map_err(err)?.collect::<Result<Vec<_>,_>>().map_err(err)?;
     drop(stmt);tx.commit().map_err(err)?;
     Ok(CatalogPage{items,total})
@@ -441,9 +510,33 @@ fn list_page_scoped(db:&Path,offset:usize,limit:usize,folder:Option<&str>)->Resu
 fn list_page(db:&Path,offset:usize,limit:usize)->Result<CatalogPage,String>{list_page_scoped(db,offset,limit,None)}
 fn set_favorite(db:&Path,id:&str,favorite:bool)->Result<(),String>{
     let conn=connection(db)?;
-    let changed=conn.execute("INSERT INTO user_metadata(asset_id,favorite) SELECT id,?2 FROM assets WHERE id=?1
-        ON CONFLICT(asset_id) DO UPDATE SET favorite=excluded.favorite",params![id,favorite]).map_err(err)?;
+    // 取消收藏同时清空分组，避免下次重新收藏时悄悄落回旧分组。
+    let changed=conn.execute("INSERT INTO user_metadata(asset_id,favorite,favorite_group) SELECT id,?2,NULL FROM assets WHERE id=?1
+        ON CONFLICT(asset_id) DO UPDATE SET favorite=excluded.favorite,favorite_group=CASE WHEN excluded.favorite=0 THEN NULL ELSE favorite_group END",params![id,favorite]).map_err(err)?;
     if changed==0{return Err("素材不存在，收藏未保存。".into());}Ok(())
+}
+/// 收藏分组：设置分组即视为收藏；传 None 只清空分组、保留收藏状态。
+fn set_favorite_group(db:&Path,ids:Vec<String>,group:Option<&str>)->Result<u64,String>{
+    if ids.is_empty()||ids.len()>500||ids.iter().any(|id|id.is_empty()||id.len()>128){return Err("请选择1至500个有效素材ID。".into());}
+    let group=match group.map(str::trim).filter(|value|!value.is_empty()){
+        None=>None,
+        Some(value)=>{
+            if value.chars().count()>40||value.chars().any(char::is_control){return Err("收藏分组须为1至40个可见字符。".into());}
+            Some(value)
+        }
+    };
+    let mut conn=connection(db)?;let tx=conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(err)?;
+    let mut changed=0u64;
+    for id in ids.into_iter().collect::<std::collections::BTreeSet<_>>(){
+        changed+=match group{
+            Some(name)=>tx.execute("INSERT INTO user_metadata(asset_id,favorite,favorite_group) SELECT id,1,?2 FROM assets WHERE id=?1
+                ON CONFLICT(asset_id) DO UPDATE SET favorite=1,favorite_group=excluded.favorite_group",params![id,name]).map_err(err)?,
+            None=>tx.execute("INSERT INTO user_metadata(asset_id,favorite) SELECT id,0 FROM assets WHERE id=?1
+                ON CONFLICT(asset_id) DO UPDATE SET favorite_group=NULL",[&id]).map_err(err)?,
+        } as u64;
+    }
+    if changed==0{return Err("素材不存在，收藏分组未保存。".into());}
+    tx.commit().map_err(err)?;Ok(changed)
 }
 fn set_tags(db:&Path,id:&str,tags:Vec<String>)->Result<(),String>{
     if tags.len()>20{return Err("每条素材最多20个标签。".into());}
@@ -482,7 +575,7 @@ fn metadata_stamp(metadata:&fs::Metadata)->Result<String,String>{
 }
 fn ordinary_audio_path(raw:&str)->Result<PathBuf,String>{
     let path=Path::new(raw.trim().trim_matches('"'));
-    if !path.is_absolute()||audio_format(path).is_none(){return Err("请选择WAV/AIFF/FLAC/MP3音频的完整绝对路径。".into());}
+    if !path.is_absolute()||audio_format(path).is_none(){return Err("请选择WAV/AIFF/FLAC/MP3/M4A音频的完整绝对路径。".into());}
     let metadata=fs::symlink_metadata(path).map_err(|e|format!("文件不可访问：{e}"))?;
     if !metadata.is_file()||is_reparse(&metadata){return Err("只接受普通音频文件，不跟随文件链接。".into());}
     fs::canonicalize(path).map_err(err)
@@ -566,6 +659,54 @@ fn relocate_asset(db:&Path,id:&str,new_path:&str)->Result<String,String>{
     Ok(target)
 }
 
+/// 波形/时长一致的重复素材合并：保留 keep 一条，把其余条的收藏、标签、库归属、
+/// 播放列表与试听历史汇入保留条，再删除其余目录记录。只整理目录，不移动、不删除磁盘源文件。
+fn merge_assets(db:&Path,keep:&str,remove:&[String])->Result<u64,String>{
+    if keep.is_empty()||keep.len()>128{return Err("保留的素材ID无效。".into());}
+    if remove.is_empty()||remove.len()>500{return Err("请一次合并1至500条重复素材。".into());}
+    let unique:std::collections::BTreeSet<_>=remove.iter().collect();
+    if unique.len()!=remove.len(){return Err("合并列表存在重复ID。".into());}
+    if remove.iter().any(|id|id==keep){return Err("保留素材不能同时出现在合并列表中。".into());}
+    let mut conn=connection(db)?;
+    for id in std::iter::once(keep).chain(remove.iter().map(|value|value.as_str())){
+        let exists:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM assets WHERE id=?1)",[id],|r|r.get(0)).map_err(err)?;
+        if !exists{return Err(format!("素材不存在，整批未合并：{id}"));}
+    }
+    let tx=conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(err)?;
+    for rid in remove{
+        // 收藏取并集；保留条未分组时继承被合并条的分组
+        let favorite:bool=tx.query_row("SELECT COALESCE((SELECT favorite FROM user_metadata WHERE asset_id=?1),0)",[rid],|r|r.get(0)).map_err(err)?;
+        if favorite{tx.execute("INSERT INTO user_metadata(asset_id,favorite) VALUES(?1,1) ON CONFLICT(asset_id) DO UPDATE SET favorite=1",[keep]).map_err(err)?;}
+        let removed_group:Option<String>=tx.query_row("SELECT favorite_group FROM user_metadata WHERE asset_id=?1",[rid],|r|r.get(0)).optional().map_err(err)?.flatten();
+        if let Some(name)=removed_group.filter(|value|!value.trim().is_empty()){
+            tx.execute("UPDATE user_metadata SET favorite_group=?2 WHERE asset_id=?1 AND COALESCE(TRIM(favorite_group),'')=''",params![keep,name]).map_err(err)?;
+        }
+        // 标签取并集，保留原有顺序
+        let removed_tags:String=tx.query_row("SELECT COALESCE((SELECT tags FROM user_metadata WHERE asset_id=?1),'[]')",[rid],|r|r.get(0)).map_err(err)?;
+        let kept_tags:String=tx.query_row("SELECT COALESCE((SELECT tags FROM user_metadata WHERE asset_id=?1),'[]')",[keep],|r|r.get(0)).map_err(err)?;
+        let mut merged:Vec<String>=serde_json::from_str(&kept_tags).map_err(err)?;
+        for tag in serde_json::from_str::<Vec<String>>(&removed_tags).map_err(err)?.into_iter(){if !merged.contains(&tag){merged.push(tag);}}
+        if merged.len()>20{return Err("合并后标签超过每条20个的上限，请先精简标签再合并。".into());}
+        let json=serde_json::to_string(&merged).map_err(err)?;let text=merged.join(" ");
+        tx.execute("INSERT INTO user_metadata(asset_id,tags,tags_search) VALUES(?1,?2,?3) ON CONFLICT(asset_id) DO UPDATE SET tags=excluded.tags,tags_search=excluded.tags_search",params![keep,json,text]).map_err(err)?;
+        // 库归属与播放列表整批迁移到保留条
+        tx.execute("INSERT OR IGNORE INTO asset_libraries(asset_id,library) SELECT ?1,library FROM asset_libraries WHERE asset_id=?2",params![keep,rid]).map_err(err)?;
+        tx.execute("INSERT OR IGNORE INTO playlist_items(playlist_id,asset_id,added) SELECT playlist_id,?1,added FROM playlist_items WHERE asset_id=?2",params![keep,rid]).map_err(err)?;
+        // 试听历史只保留最近一次
+        let played:Option<String>=tx.query_row("SELECT played_at FROM play_history WHERE asset_id=?1",[rid],|r|r.get(0)).optional().map_err(err)?;
+        if let Some(played)=played{
+            let kept:Option<String>=tx.query_row("SELECT played_at FROM play_history WHERE asset_id=?1",[keep],|r|r.get(0)).optional().map_err(err)?;
+            match kept{
+                None=>{tx.execute("INSERT INTO play_history(asset_id,played_at) VALUES(?1,?2)",params![keep,played]).map_err(err)?;}
+                Some(old)=>{if played>old{tx.execute("UPDATE play_history SET played_at=?2 WHERE asset_id=?1",params![keep,played]).map_err(err)?;}}
+            }
+        }
+        tx.execute("DELETE FROM assets WHERE id=?1",[rid]).map_err(err)?;
+    }
+    tx.commit().map_err(err)?;
+    Ok(remove.len() as u64)
+}
+
 #[tauri::command]
 pub async fn catalog_preview(root:String,state:tauri::State<'_,CatalogState>)->Result<String,String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||preview_and_remember(&db,&root)).await.map_err(err)?}
 #[tauri::command]
@@ -576,19 +717,22 @@ pub async fn catalog_get_items(ids:Vec<String>,state:tauri::State<'_,CatalogStat
         let conn=connection(&db)?;let mut items=Vec::new();let mut seen=std::collections::HashSet::new();
         for id in ids{
             if !seen.insert(id.clone()){continue;}
-            let item=conn.query_row("SELECT a.id,a.path,a.name,a.format,a.size,a.modified,a.rate,a.channels,a.duration,a.status,a.error,COALESCE(u.favorite,0),COALESCE(u.tags,'[]') FROM assets a LEFT JOIN user_metadata u ON a.id=u.asset_id WHERE a.id=?1",[id],|r|{
+            let item=conn.query_row("SELECT a.id,a.path,a.name,a.format,a.size,a.modified,a.rate,a.channels,a.duration,a.status,a.error,COALESCE(u.favorite,0),COALESCE(u.tags,'[]'),COALESCE(u.favorite_group,'') FROM assets a LEFT JOIN user_metadata u ON a.id=u.asset_id WHERE a.id=?1",[id],|r|{
                 let tags:String=r.get(12)?;let tags=serde_json::from_str(&tags).map_err(|e|rusqlite::Error::FromSqlConversionFailure(12,rusqlite::types::Type::Text,Box::new(e)))?;
-                Ok(CatalogItem{id:r.get(0)?,path:r.get(1)?,name:r.get(2)?,format:r.get(3)?,size:r.get(4)?,modified:r.get(5)?,rate:r.get(6)?,channels:r.get(7)?,duration:r.get(8)?,status:r.get(9)?,error:r.get(10)?,favorite:r.get(11)?,tags})
+                let group:String=r.get(13)?;
+                Ok(CatalogItem{id:r.get(0)?,path:r.get(1)?,name:r.get(2)?,format:r.get(3)?,size:r.get(4)?,modified:r.get(5)?,rate:r.get(6)?,channels:r.get(7)?,duration:r.get(8)?,status:r.get(9)?,error:r.get(10)?,favorite:r.get(11)?,favorite_group:if group.is_empty(){None}else{Some(group)},tags})
             }).optional().map_err(err)?;if let Some(item)=item{items.push(item);}
         }Ok(items)
     }).await.map_err(err)?
 }
 #[tauri::command]
-pub async fn catalog_list(state:tauri::State<'_,CatalogState>,offset:usize,limit:usize,folder:Option<String>,query:Option<String>,format:Option<String>,sort:Option<String>,favorites_only:Option<bool>,library:Option<String>,tag:Option<String>,tags:Option<Vec<String>>,history_only:Option<bool>,playlist_id:Option<String>,min_duration:Option<f64>,max_duration:Option<f64>,multilingual:Option<bool>)->Result<CatalogPage,String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||search_page(&db,offset,limit,SearchFilter{folder:folder.as_deref(),query:query.as_deref(),format:format.as_deref(),sort:sort.as_deref(),favorites_only:favorites_only.unwrap_or(false),library:library.as_deref(),tag:tag.as_deref(),tags:tags.unwrap_or_default(),history_only:history_only.unwrap_or(false),playlist_id:playlist_id.as_deref(),min_duration,max_duration,multilingual:multilingual.unwrap_or(false)})).await.map_err(err)?}
+pub async fn catalog_list(state:tauri::State<'_,CatalogState>,offset:usize,limit:usize,folder:Option<String>,query:Option<String>,format:Option<String>,sort:Option<String>,favorites_only:Option<bool>,library:Option<String>,tag:Option<String>,tags:Option<Vec<String>>,history_only:Option<bool>,playlist_id:Option<String>,min_duration:Option<f64>,max_duration:Option<f64>,multilingual:Option<bool>,metadata:Option<bool>,favorite_group:Option<String>,favorite_ungrouped:Option<bool>,ready_only:Option<bool>)->Result<CatalogPage,String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||search_page(&db,offset,limit,SearchFilter{folder:folder.as_deref(),query:query.as_deref(),format:format.as_deref(),sort:sort.as_deref(),favorites_only:favorites_only.unwrap_or(false),favorite_group:favorite_group.as_deref(),favorite_ungrouped:favorite_ungrouped.unwrap_or(false),library:library.as_deref(),tag:tag.as_deref(),tags:tags.unwrap_or_default(),history_only:history_only.unwrap_or(false),playlist_id:playlist_id.as_deref(),min_duration,max_duration,multilingual:multilingual.unwrap_or(false),metadata:metadata.unwrap_or(false),ready_only:ready_only.unwrap_or(false)})).await.map_err(err)?}
 #[tauri::command]
 pub async fn catalog_assign_library(ids:Vec<String>,library:String,state:tauri::State<'_,CatalogState>)->Result<u64,String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||assign_library(&db,ids,&library)).await.map_err(err)?}
 #[tauri::command]
 pub async fn catalog_set_favorite(state:tauri::State<'_,CatalogState>,id:String,favorite:bool)->Result<(),String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||set_favorite(&db,&id,favorite)).await.map_err(err)?}
+#[tauri::command]
+pub async fn catalog_set_favorite_group(ids:Vec<String>,group:Option<String>,state:tauri::State<'_,CatalogState>)->Result<u64,String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||set_favorite_group(&db,ids,group.as_deref())).await.map_err(err)?}
 #[tauri::command]
 pub async fn catalog_set_tags(state:tauri::State<'_,CatalogState>,id:String,tags:Vec<String>)->Result<(),String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||set_tags(&db,&id,tags)).await.map_err(err)?}
 #[tauri::command]
@@ -611,6 +755,8 @@ pub async fn catalog_check_availability(folder:Option<String>,state:tauri::State
 pub async fn catalog_prepare_fingerprint(id:String,state:tauri::State<'_,CatalogState>)->Result<String,String>{let state=state.inner().clone();tauri::async_runtime::spawn_blocking(move||state.with_idle(|db|prepare_fingerprint(db,&id))).await.map_err(err)?}
 #[tauri::command]
 pub async fn catalog_relocate(id:String,new_path:String,state:tauri::State<'_,CatalogState>)->Result<String,String>{let state=state.inner().clone();tauri::async_runtime::spawn_blocking(move||state.with_idle(|db|relocate_asset(db,&id,&new_path))).await.map_err(err)?}
+#[tauri::command]
+pub async fn catalog_merge_assets(keep:String,remove:Vec<String>,state:tauri::State<'_,CatalogState>)->Result<u64,String>{let state=state.inner().clone();tauri::async_runtime::spawn_blocking(move||state.with_idle(|db|merge_assets(db,&keep,&remove))).await.map_err(err)?}
 
 #[cfg(test)]
 mod tests {
@@ -632,6 +778,68 @@ mod tests {
     }
     fn wait_for_import(state:&CatalogState){let deadline=std::time::Instant::now()+Duration::from_secs(20);while state.inner.active.lock().unwrap().is_some(){assert!(std::time::Instant::now()<deadline,"导入任务超时");std::thread::sleep(Duration::from_millis(2));}}
     fn library_page(f:&Fixture,library:&str)->CatalogPage{search_page(&f.db,0,100,SearchFilter{library:Some(library),..Default::default()}).unwrap()}
+    #[test]
+    fn ready_only_filter_composes_with_keyword_and_total(){
+        let f=Fixture::new();let _state=f.state();f.wav("ready.wav");f.wav("missing.wav");
+        direct(&f,"ready-only-filter",&AtomicBool::new(false));
+        let all=list_page(&f.db,0,100).unwrap();assert_eq!(all.total,2);
+        let id=all.items.iter().find(|item|item.name=="missing.wav").unwrap().id.clone();
+        {let conn=connection(&f.db).unwrap();conn.execute("UPDATE assets SET status='missing' WHERE id=?1",params![id]).unwrap();}
+        // 关闭开关时两条都在；开启后仅保留 status='ready'，COUNT 与分页结果一致。
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some(".wav"),..Default::default()}).unwrap().total,2);
+        let filtered=search_page(&f.db,0,100,SearchFilter{query:Some(".wav"),ready_only:true,..Default::default()}).unwrap();
+        assert_eq!(filtered.total,1);assert_eq!(filtered.items.len(),1);assert_eq!(filtered.items[0].name,"ready.wav");
+        // 关键词仍独立生效，隐藏不可用素材不会放宽其它条件。
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("不存在的素材"),ready_only:true,..Default::default()}).unwrap().total,0);
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{ready_only:true,..Default::default()}).unwrap().total,1);
+    }
+    #[test]
+    fn metadata_toggle_only_adds_embedded_fields_to_text_search(){
+        let f=Fixture::new();let _state=f.state();f.wav("door-close.wav");
+        direct(&f,"meta-scan",&AtomicBool::new(false));
+        let id=list_page(&f.db,0,100).unwrap().items[0].id.clone();
+        {let conn=connection(&f.db).unwrap();conn.execute("UPDATE assets SET meta_search='近场收录 foley_marker' WHERE id=?1",params![id]).unwrap();}
+        // 关闭时只搜文件名：内嵌元数据词与标签词都不命中，名称仍命中。
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("foley_marker"),..Default::default()}).unwrap().total,0);
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("近场收录"),..Default::default()}).unwrap().total,0);
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("door-close"),..Default::default()}).unwrap().total,1);
+        set_tags(&f.db,&id,vec!["门".into()]).unwrap();
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("门"),..Default::default()}).unwrap().total,0);
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("门"),metadata:true,..Default::default()}).unwrap().total,1);
+        // 开启后两个词都命中，名称搜索与注入防护不受影响。
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("foley_marker"),metadata:true,..Default::default()}).unwrap().total,1);
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("近场收录"),metadata:true,..Default::default()}).unwrap().total,1);
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("door-close"),metadata:true,..Default::default()}).unwrap().total,1);
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("' OR 1=1 --"),metadata:true,..Default::default()}).unwrap().total,0);
+        // 标签筛选仍是与文本关键词独立的一层条件。
+        set_tags(&f.db,&id,vec!["门".into()]).unwrap();
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("foley_marker"),metadata:true,tag:Some("门"),..Default::default()}).unwrap().total,1);
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("foley_marker"),metadata:true,tag:Some("不存在"),..Default::default()}).unwrap().total,0);
+    }
+    #[test]
+    fn metadata_text_extracts_bwf_fields_and_skips_non_wav(){
+        let f=Fixture::new();let path=f.audio().join("with-meta.wav");fs::write(&path,wav()).unwrap();
+        crate::bwf_metadata::write(&path,&crate::bwf_metadata::MetadataPatch{
+            description:Some("金属门闩特写".into()),note:Some("近场收录".into()),
+            keywords:Some("门 金属".into()),category:Some("FOLEY".into()),..Default::default()
+        }).unwrap();
+        let text=metadata_search_text(&path,"WAV");
+        assert!(text.contains("金属门闩特写"),"抽取结果：{text}");
+        assert!(text.contains("近场收录"),"抽取结果：{text}");
+        assert!(text.contains("FOLEY"),"抽取结果：{text}");
+        assert_eq!(metadata_search_text(&path,"MP3"),"");
+    }
+    #[test]
+    fn write_back_refreshes_metadata_index_for_search(){
+        let f=Fixture::new();let state=f.state();f.wav("indexed.wav");
+        direct(&f,"index-scan",&AtomicBool::new(false));
+        let id=list_page(&f.db,0,100).unwrap().items[0].id.clone();
+        let path=f.audio().join("indexed.wav");
+        crate::bwf_metadata::write(&path,&crate::bwf_metadata::MetadataPatch{note:Some("回写后命中词".into()),..Default::default()}).unwrap();
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("回写后命中词"),metadata:true,..Default::default()}).unwrap().total,0);
+        state.refresh_metadata_index(&id).unwrap();
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{query:Some("回写后命中词"),metadata:true,..Default::default()}).unwrap().total,1);
+    }
     #[test]
     fn libraries_migrate_existing_records_to_sound_without_losing_annotations(){
         let f=Fixture::new();let state=f.state();f.wav("existing.wav");direct(&f,"legacy-scan",&AtomicBool::new(false));let item=list_page(&f.db,0,100).unwrap().items.remove(0);
@@ -779,7 +987,7 @@ mod tests {
         let id=list_page(&f.db,0,100).unwrap().items[0].id.clone();
         set_favorite(&f.db,&id,true).unwrap();
         set_tags(&f.db,&id,vec![" 深夜 ".into(),"Deep".into(),"深夜".into(),"".into(),"雨_100%".into()]).unwrap();
-        let result=search_page(&f.db,0,100,SearchFilter{query:Some("深夜 deep 雨_100%"),favorites_only:true,..Default::default()}).unwrap();
+        let result=search_page(&f.db,0,100,SearchFilter{query:Some("深夜 deep 雨_100%"),favorites_only:true,metadata:true,..Default::default()}).unwrap();
         assert_eq!(result.total,1);assert_eq!(result.items[0].tags,vec!["深夜","Deep","雨_100%"]);assert!(result.items[0].favorite);
         let mut changed=wav();changed.extend([0,0]);fs::write(f.audio().join("素材.wav"),changed).unwrap();direct(&f,"after",&AtomicBool::new(false));
         drop(state);let _reopened=f.state();let saved=list_page(&f.db,0,100).unwrap();assert_eq!(saved.items[0].id,id);assert!(saved.items[0].favorite);assert_eq!(saved.items[0].tags.len(),3);
@@ -787,6 +995,29 @@ mod tests {
         assert!(set_tags(&f.db,&id,vec!["长".repeat(41)]).is_err());assert!(set_tags(&f.db,&id,vec!["x".into();21]).is_err());assert!(set_tags(&f.db,&id,vec!["x\ny".into()]).is_err());
         assert_eq!(list_page(&f.db,0,100).unwrap().items[0].tags.len(),3);
         assert!(set_favorite(&f.db,"unknown",true).is_err());assert!(set_tags(&f.db,"unknown",vec![]).is_err());
+    }
+    #[test]
+    fn favorite_groups_set_group_also_favorites_and_unfavorite_clears_it(){
+        let f=Fixture::new();let state=f.state();f.wav("甲.wav");f.wav("乙.wav");direct(&f,"before",&AtomicBool::new(false));
+        let ids=list_page(&f.db,0,100).unwrap().items.into_iter().map(|item|item.id).collect::<Vec<_>>();
+        assert_eq!(set_favorite_group(&f.db,vec![ids[0].clone()],Some(" 常用 ")).unwrap(),1);
+        let grouped=search_page(&f.db,0,100,SearchFilter{favorite_group:Some("常用"),..Default::default()}).unwrap();
+        assert_eq!(grouped.total,1);assert!(grouped.items[0].favorite);assert_eq!(grouped.items[0].favorite_group.as_deref(),Some("常用"));
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{favorite_ungrouped:true,..Default::default()}).unwrap().total,0);
+        assert_eq!(set_favorite_group(&f.db,vec![ids[1].clone()],None).unwrap(),1);
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{favorite_ungrouped:true,..Default::default()}).unwrap().total,0);
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{favorites_only:true,..Default::default()}).unwrap().total,1);
+        // 清空分组保留收藏，取消收藏一并清空分组
+        set_favorite_group(&f.db,vec![ids[0].clone()],None).unwrap();
+        assert_eq!(list_page(&f.db,0,100).unwrap().items.iter().find(|item|item.id==ids[0]).unwrap().favorite_group,None);
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{favorites_only:true,..Default::default()}).unwrap().total,1);
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{favorite_ungrouped:true,..Default::default()}).unwrap().total,1);
+        set_favorite_group(&f.db,vec![ids[0].clone()],Some("雨声")).unwrap();
+        set_favorite(&f.db,&ids[0],false).unwrap();
+        assert_eq!(list_page(&f.db,0,100).unwrap().items.iter().find(|item|item.id==ids[0]).unwrap().favorite_group,None);
+        assert!(set_favorite_group(&f.db,vec![ids[0].clone()],Some(&"长".repeat(41))).is_err());
+        assert!(set_favorite_group(&f.db,vec![],Some("甲")).is_err());
+        assert!(set_favorite_group(&f.db,vec!["unknown".into()],Some("甲")).is_err());
     }
     #[test]
     fn asset_resolution_accepts_only_registered_existing_audio_id(){
@@ -873,6 +1104,66 @@ mod tests {
             assert!((duration-expected).abs()<0.02,"{name} 时长 {duration} 与实测 {expected} 不符");
             assert_eq!(fs::read(source.join(name)).unwrap(),originals[i]);assert_eq!(fs::read(f.audio().join(name)).unwrap(),originals[i]);
         }
+    }
+    #[test]
+    fn m4a_imports_with_duration_format_filter_and_unchanged_bytes(){
+        let f=Fixture::new();let _state=f.state();
+        let source=Path::new(env!("CARGO_MANIFEST_DIR")).join("../build/s1-samples/aac-44100.m4a");
+        let bytes=fs::read(&source).unwrap();
+        fs::write(f.audio().join("aac-44100.m4a"),&bytes).unwrap();
+        let job=direct(&f,"m4a",&AtomicBool::new(false));
+        assert_eq!(job.added,1);
+        assert_eq!(job.failed,0,"M4A导入失败：{:?}",list_page(&f.db,0,100).unwrap().items.first().and_then(|item|item.error.clone()));
+        let item=&list_page(&f.db,0,100).unwrap().items[0];
+        assert_eq!(item.format,"M4A");assert_eq!(item.status,"ready");
+        assert_eq!(item.rate,Some(44100));assert_eq!(item.channels,Some(1));
+        let duration=item.duration.unwrap_or_else(||panic!("m4a 未取得时长"));
+        assert!((0.45..=0.56).contains(&duration),"m4a 时长 {duration} 超出AAC编码容差");
+        // 格式筛选白名单（大小写不敏感）接受 M4A，且不误伤既有格式。
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{format:Some("M4A"),..Default::default()}).unwrap().total,1);
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{format:Some("m4a"),..Default::default()}).unwrap().total,1);
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{format:Some("MP3"),..Default::default()}).unwrap().total,0);
+        assert!(search_page(&f.db,0,100,SearchFilter{format:Some("OGG"),..Default::default()}).is_err());
+        assert_eq!(fs::read(f.audio().join("aac-44100.m4a")).unwrap(),bytes);
+    }
+    #[test]
+    fn merge_assets_folds_annotations_memberships_playlist_history_and_keeps_disk_files(){
+        let f=Fixture::new();let _state=f.state();
+        f.wav("a.wav");f.wav("b.wav");f.wav("c.wav");
+        direct(&f,"merge",&AtomicBool::new(false));
+        let items=list_page(&f.db,0,100).unwrap().items;
+        let find=|name:&str|items.iter().find(|item|item.name==name).unwrap().id.clone();
+        let (a,b,c)=(find("a.wav"),find("b.wav"),find("c.wav"));
+        set_favorite(&f.db,&b,true).unwrap();
+        set_tags(&f.db,&a,vec!["保留".into()]).unwrap();
+        set_tags(&f.db,&b,vec!["保留".into(),"额外".into()]).unwrap();
+        assign_library(&f.db,vec![b.clone()],"music").unwrap();
+        library_tools::record_history(&f.db,&b).unwrap();
+        {let conn=connection(&f.db).unwrap();
+         conn.execute("INSERT INTO playlists(id,library,name,created) VALUES('pl','sound','列表','0')",[]).unwrap();
+         conn.execute("INSERT INTO playlist_items(playlist_id,asset_id,added) VALUES('pl',?1,'0')",[&b]).unwrap();}
+        let merged=merge_assets(&f.db,&a,&[b.clone()]).unwrap();
+        assert_eq!(merged,1);
+        let page=list_page(&f.db,0,100).unwrap();
+        assert_eq!(page.total,2);
+        let kept=page.items.iter().find(|item|item.id==a).unwrap();
+        assert!(kept.favorite);
+        assert_eq!(kept.tags,vec!["保留","额外"]);
+        // 库归属、播放列表、试听历史都迁移到保留条
+        assert_eq!(search_page(&f.db,0,100,SearchFilter{library:Some("music"),..Default::default()}).unwrap().items[0].id,a);
+        let conn=connection(&f.db).unwrap();
+        assert_eq!(conn.query_row::<u64,_,_>("SELECT COUNT(*) FROM playlist_items WHERE asset_id=?1",[&a],|r|r.get(0)).unwrap(),1);
+        assert_eq!(conn.query_row::<u64,_,_>("SELECT COUNT(*) FROM play_history WHERE asset_id=?1",[&a],|r|r.get(0)).unwrap(),1);
+        assert_eq!(conn.query_row::<u64,_,_>("SELECT COUNT(*) FROM asset_fingerprints WHERE asset_id=?1",[&b],|r|r.get(0)).unwrap(),0);
+        // 磁盘源文件原样保留，未被合并动过
+        assert_eq!(fs::read(f.audio().join("b.wav")).unwrap(),wav());
+        assert_eq!(fs::read(f.audio().join("c.wav")).unwrap(),wav());
+        // 参数校验：空列表、缺素材、保留条混入合并列表都整体拒绝
+        assert!(merge_assets(&f.db,&a,&[]).is_err());
+        assert!(merge_assets(&f.db,&a,&["missing".into()]).is_err());
+        assert!(merge_assets(&f.db,&a,&[a.clone()]).is_err());
+        assert!(merge_assets(&f.db,&a,&[c.clone(),c.clone()]).is_err());
+        assert_eq!(list_page(&f.db,0,100).unwrap().total,2);
     }
     #[test]
     fn rescan_refills_missing_duration_without_changing_id(){

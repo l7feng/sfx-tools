@@ -75,7 +75,7 @@ impl Paths {
         let model_dir = lexical_normalize(&repo.join("build/models/clap-htsat-unfused"));
         let python = std::env::var_os("SOUND_WORKBENCH_AI_PYTHON")
             .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("D:/Ai-Files/Tools/BuildEnv/sound-workbench-ai/Scripts/python.exe"));
+            .unwrap_or_else(|| PathBuf::from("D:/Ai-Files/Tools/BuildEnv/sfx-tools-ai/Scripts/python.exe"));
         Self { python, model_dir, data_dir }
     }
 }

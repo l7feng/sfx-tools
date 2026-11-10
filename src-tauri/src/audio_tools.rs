@@ -2,7 +2,7 @@
 use crate::{catalog::CatalogState,player::{PlaybackSource,PlayerState,PlayerSnapshot}};
 use rodio::Source;
 use serde::{Serialize,Deserialize};
-use std::{collections::VecDeque,fs::{self,File,OpenOptions},io::{Read,Write,Seek,SeekFrom,BufWriter},path::{Path,PathBuf},sync::{Arc,Mutex,atomic::{AtomicBool,Ordering}},time::UNIX_EPOCH};
+use std::{collections::VecDeque,fs::{self,File,OpenOptions},io::{Read,Write,Seek,SeekFrom,BufWriter},path::{Path,PathBuf},sync::{Arc,Mutex,atomic::{AtomicBool,Ordering}},time::{Duration,UNIX_EPOCH}};
 use uuid::Uuid;
 const MAX_SECONDS:f64=600.0;
 const CACHE_LIMIT:u64=1536*1024*1024;
@@ -88,6 +88,66 @@ fn export(state:&AudioToolsState,job_id:&str,folder:&str)->Result<ExportResult,S
 #[tauri::command]pub async fn audio_tools_preview(job_id:String,index:Option<usize>,tools:tauri::State<'_,AudioToolsState>,player:tauri::State<'_,PlayerState>)->Result<PlayerSnapshot,String>{let tools=tools.inner().clone();let player=player.inner().clone();tauri::async_runtime::spawn_blocking(move||{let index=index.unwrap_or(0);let path=tools.resolve_output(&job_id,index)?;player.play_derived(format!("tool:{job_id}:{index}"),path)}).await.map_err(err)?}
 #[tauri::command]pub async fn audio_tools_export(job_id:String,folder:String,tools:tauri::State<'_,AudioToolsState>)->Result<ExportResult,String>{let tools=tools.inner().clone();tauri::async_runtime::spawn_blocking(move||export(&tools,&job_id,&folder)).await.map_err(err)?}
 
+// 波形片段导出：按选区复制为独立 PCM16 WAV，原音频只读；同名文件不覆盖。
+const MAX_CLIP_SECONDS:f64=600.0;
+fn clip_bounds(start:f64,end:f64,total:f64)->Result<(f64,f64),String>{
+ if !start.is_finite()||!end.is_finite(){return Err("片段起止时间无效。".into());}
+ if start<0.0||end<=start{return Err("片段起止时间无效。".into());}
+ if end-start>MAX_CLIP_SECONDS{return Err("单次片段导出不超过10分钟。".into());}
+ if !total.is_finite()||total<=0.0{return Err("源时长无效。".into());}
+ if start>=total{return Err("片段起点超出音频时长。".into());}
+ if end>total+0.02{return Err("片段终点超出音频时长。".into());}
+ Ok((start,end.min(total)))
+}
+fn clip_name(source:&Path,start:f64,end:f64)->String{
+ let raw=source.file_stem().and_then(|value|value.to_str()).unwrap_or("clip");
+ let stem:String=raw.chars().map(|c|if c.is_alphanumeric()||matches!(c,'-'|'_'|' '|'('|')'){c}else{'_'}).take(60).collect();
+ format!("{}-片段-{start:.2}s-{end:.2}s.wav",if stem.trim().is_empty(){"clip"}else{stem.trim()})
+}
+fn clip_export(id:&str,start:f64,end:f64,folder:&str,catalog:&CatalogState)->Result<ExportResult,String>{
+ let stamp=source_stamp(catalog,id)?;
+ let destination=Path::new(folder);
+ if !destination.is_absolute(){return Err("请选择绝对路径目标目录。".into());}
+ reject_links(destination)?;
+ if !destination.is_dir(){return Err("导出目标目录不存在。".into());}
+ let destination=fs::canonicalize(destination).map_err(err)?;
+ let mut source=PlaybackSource::open(&stamp.path)?;
+ let rate=source.sample_rate();let channels=source.channels();
+ if !(1..=2).contains(&channels)||!(1..=192000).contains(&rate){return Err("片段导出支持不高于192kHz的单/双声道素材。".into());}
+ let total=source.total_duration().ok_or("源时长未知，请先扫描或转换素材。")?.as_secs_f64();
+ let (start,end)=clip_bounds(start,end,total)?;
+ let frames=((end-start)*rate as f64).round() as u64;
+ if frames==0{return Err("片段长度不足一个采样。".into());}
+ source.try_seek(Duration::from_secs_f64(start)).map_err(|e|format!("无法定位到片段起点：{e}"))?;
+ let target=destination.join(clip_name(&stamp.path,start,end));
+ if target.exists(){return Err("导出目标同名文件已存在，未覆盖。".into());}
+ let partial=destination.join(format!(".{}.{}.partial",clip_name(&stamp.path,start,end),Uuid::new_v4()));
+ let mut cleanup=Cleanup{paths:vec![partial.clone()]};
+ let file=OpenOptions::new().create_new(true).write(true).open(&partial).map_err(err)?;
+ let mut writer=BufWriter::with_capacity(65536,file);
+ writer.write_all(&header(frames,channels,rate)?).map_err(err)?;
+ let mut buffer=vec![0u8;BLOCK*channels as usize*2];let mut written=0u64;
+ while written<frames{
+  let count=(frames-written).min(BLOCK as u64) as usize;
+  for index in 0..count{for channel in 0..channels as usize{
+   let value=source.next().ok_or("片段解码到文件末尾，源时长可能与文件头不一致。")? as f64;
+   if !value.is_finite(){return Err("源音频含非有限采样。".into());}
+   let clamped=value.clamp(-1.0,1.0);let pcm=(clamped*if clamped>=0.0{32767.0}else{32768.0}).round() as i16;
+   let offset=(index*channels as usize+channel)*2;buffer[offset..offset+2].copy_from_slice(&pcm.to_le_bytes());
+  }}
+  writer.write_all(&buffer[..count*channels as usize*2]).map_err(err)?;
+  written+=count as u64;
+ }
+ if let Some(error)=source.decode_error(){return Err(format!("音频解码失败：{error}"));}
+ writer.flush().map_err(err)?;writer.get_ref().sync_all().map_err(err)?;drop(writer);drop(source);
+ let bytes=44+frames*channels as u64*2;
+ if identity(&partial)?.size!=bytes{return Err("片段WAV长度核验失败。".into());}
+ if source_stamp(catalog,id)?!=stamp{return Err("导出期间源素材发生变化，未交付结果。".into());}
+ rename_new(&partial,&target)?;cleanup.paths.push(target.clone());cleanup.paths.clear();
+ Ok(ExportResult{paths:vec![target.display().to_string()],bytes})
+}
+#[tauri::command]pub async fn audio_clip_export(id:String,start:f64,end:f64,folder:String,catalog:tauri::State<'_,CatalogState>)->Result<ExportResult,String>{let catalog=catalog.inner().clone();tauri::async_runtime::spawn_blocking(move||clip_export(&id,start,end,&folder,&catalog)).await.map_err(err)?}
+
 
 #[cfg(test)]mod tests{
  use super::*;use std::{thread,time::{Duration,Instant}};
@@ -127,5 +187,11 @@ fn export(state:&AudioToolsState,job_id:&str,folder:&str)->Result<ExportResult,S
  }
  #[test]fn tools_bad_options_and_unknown_sources_fail_without_outputs(){
   for options in [ToolOptions{speed:f64::NAN,..Default::default()},ToolOptions{speed:0.0,..Default::default()},ToolOptions{distance:51.0,..Default::default()},ToolOptions{effect:"vst".into(),..Default::default()},ToolOptions{wet:2.0,..Default::default()}]{assert!(validate("effect",&options).is_err());}assert!(validate("unknown",&Default::default()).is_err());let f=Fixture::new();let state=AudioToolsState::new(f.root.join("not-created"));assert!(state.start("not-an-id".into(),"reverse".into(),Default::default(),f.catalog().clone()).is_err());assert!(!state.root.exists());assert_eq!(state.snapshot().unwrap().status,"failed");
+ }
+ #[test]fn clip_export_copies_selected_range_and_never_overwrites(){
+  let f=Fixture::new();let original:Vec<i16>=(0..1000).flat_map(|n|[n as i16,n as i16]).collect();let id=f.source(8000,2,&original);let path=f.catalog().resolve_asset(&id).unwrap();let before=fs::read(&path).unwrap();let folder=f.root.join("clips");fs::create_dir(&folder).unwrap();
+  let result=clip_export(&id,0.01,0.02,&folder.display().to_string(),f.catalog()).unwrap();assert_eq!(result.paths.len(),1);assert_eq!(result.bytes,44+80*2*2);let output=samples(&result.paths[0]);assert_eq!(output.len(),160);let first=output[0] as usize;assert!((72..=88).contains(&first),"seek drifted to frame {first}");for index in 0..80{assert_eq!(output[index*2] as usize,first+index);assert_eq!(output[index*2+1] as usize,first+index);}assert_eq!(fs::read(&path).unwrap(),before);
+  assert!(clip_export(&id,0.01,0.02,&folder.display().to_string(),f.catalog()).is_err());
+  for (start,end) in [(-0.1,0.02),(0.02,0.01),(0.0,f64::NAN),(0.1,0.16),(0.2,0.21)]{assert!(clip_export(&id,start,end,&folder.display().to_string(),f.catalog()).is_err());}
  }
 }

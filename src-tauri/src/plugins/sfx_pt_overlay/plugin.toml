@@ -1,0 +1,13 @@
+id = "sfx_pt_overlay"
+version = "0.1.0"
+kind = "in_process_module"
+min_app_version = "0.1.25"
+component_epoch = 1
+feature_flag = "plugin-pt-overlay"
+capabilities = ["reads_user_library", "connects_ptsl"]
+requires_pt = true
+requires_test_project = true
+status = "read_only"
+entry_rust = "plugins::sfx_pt_overlay"
+entry_ts = "plugins/sfx-pt-overlay"
+rollout_percent = 100
