@@ -126,6 +126,7 @@ fn main() {
             dedup::dedup_open_workbench,
             dedup::dedup_locate,
             dedup::dedup_remember_exe,
+            dedup::dedup_launch_gui,
             folder_picker::settings_pick_folder,
             catalog::catalog_set_favorite,
             catalog::catalog_set_favorite_group,

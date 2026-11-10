@@ -472,6 +472,17 @@ pub fn dedup_remember_exe(path: String) -> Result<(), String> {
     write_record(&checked)
 }
 
+/// 拉起 Audio Dedup 自己的 GUI（不加 --cli）。用户在只读工作台里看完分组后，
+/// 需要处置时直接跳过去，省得再去文件管理器找 exe。处置仍在那里逐次确认。
+#[tauri::command]
+pub fn dedup_launch_gui(exe: String) -> Result<(), String> {
+    let path = check_exe(&exe)?;
+    let mut cmd = std::process::Command::new(&path);
+    if let Some(dir) = path.parent() { cmd.current_dir(dir); }
+    cmd.spawn().map_err(|e| format!("无法启动去重界面：{e}"))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

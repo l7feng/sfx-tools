@@ -87,7 +87,7 @@ function Catalog(){
  const [tagIndex,setTagIndex]=useState(false);
  const [settingsOpen,setSettingsOpen]=useState(false),[managerOpen,setManagerOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[activeTool,setActiveTool]=useState<ToolPage|null>(null);
  /** 插件工作区窗口（0.1.35）：入口在顶栏「音乐库」右侧，激活可插拔模块后在这里真正干活。 */
- const [pluginOpen,setPluginOpen]=useState(false);
+ const [pluginOpen,setPluginOpen]=useState(()=>new URLSearchParams(location.search).has('plugin'));
  const [page,setPage]=useState<CatalogPage>({items:[],total:0}),[offset,setOffset]=useState(0),[loadedOffset,setLoadedOffset]=useState(0),[jobs,setJobs]=useState<ImportJob[]>([]);
  const [query,setQuery]=useState(''),[format,setFormat]=useState('全部格式'),[selected,setSelected]=useState<CatalogAsset|null>(null),[selection,setSelection]=useState<string[]>([]);
  const [debouncedQuery,setDebouncedQuery]=useState(''),[sort,setSort]=useState('name'),[favoritesOnly,setFavoritesOnly]=useState(false),[favoriteGroup,setFavoriteGroup]=useState<string|null>(null),[favoriteUngrouped,setFavoriteUngrouped]=useState(false),[loadedKey,setLoadedKey]=useState('');
