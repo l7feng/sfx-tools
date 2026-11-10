@@ -1,0 +1,57 @@
+/* 侧栏「可拖动 / 可折叠」：停靠态是 .workspace 里的普通 flex 子元素，
+   拖出后整块变成 position:fixed 浮窗；折叠态收成纯图标条。 */
+.sidebar-dock{position:relative;display:flex;flex-shrink:0;min-height:0;background:var(--panel)}
+.sidebar-dock-grip{flex:0 0 6px;align-self:stretch;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:grab;touch-action:none;user-select:none;background:var(--overlay-weak);border-right:1px solid var(--line);z-index:3}
+.sidebar-dock-grip:active{cursor:grabbing}
+.sidebar-dock-grip i{width:2px;height:2px;border-radius:50%;background:var(--muted);opacity:.8}
+.sidebar-dock-grip:hover,.sidebar-dock-grip:focus-visible{background:var(--accent-wash);outline:0}
+.sidebar-dock-grip:hover i,.sidebar-dock-grip:focus-visible i{background:var(--accent)}
+.sidebar-dock .panel-heading{cursor:grab;touch-action:none;user-select:none}
+.sidebar-dock.is-dragging{user-select:none}
+.sidebar-dock.is-dragging .sidebar-dock-grip{background:var(--accent-wash);cursor:grabbing}
+.sidebar-dock.is-dragging .panel-heading{cursor:grabbing}
+.panel-heading-actions{display:flex;align-items:center;gap:2px}
+.panel-heading-actions button{width:24px;min-width:24px;height:24px;min-height:24px;padding:0;font-size:14px;line-height:1;color:var(--muted)}
+.panel-heading-actions button:hover{color:var(--accent)}
+.sidebar-shortcuts .nav-glyph{display:none;width:14px;height:14px;flex:0 0 14px}
+
+/* 浮动：留出一条 22px 的回停槽，随时能点回来；拖到窗口最左侧也会自动重新停靠。 */
+.sidebar-dock-slot{flex:0 0 22px;display:flex;align-items:center;justify-content:center;background:var(--panel);border-right:1px solid var(--line)}
+.sidebar-dock-slot button{width:18px;min-width:18px;min-height:28px;padding:0;border:0;background:transparent;color:var(--muted);font-size:12px}
+.sidebar-dock-slot button:hover{color:var(--accent)}
+.sidebar-dock.is-floating{position:fixed;z-index:60;flex-direction:column;width:248px;height:min(70vh,620px);border:1px solid var(--line-strong);border-radius:8px;box-shadow:var(--shadow-lg,0 18px 48px #0009);overflow:hidden}
+.sidebar-dock.is-floating .sidebar-dock-grip{flex:0 0 12px;width:100%;flex-direction:row;align-self:auto;border-right:0;border-bottom:1px solid var(--line);gap:4px}
+.sidebar-dock.is-floating .sidebar-dock-grip i{width:16px;height:2px;border-radius:2px}
+.sidebar-dock.is-floating .sidebar{width:100%;height:auto;flex:1;min-height:0;border-right:0}
+.sidebar-dock.is-floating .folder-tree{max-height:min(42vh,320px)}
+/* 浮窗展开态：参考图 #2 的「图标 + 文字」两列导航；停靠态仍保留图 #1 的 2×3 文字网格。 */
+.sidebar-dock.is-floating .sidebar-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+.sidebar-dock.is-floating .sidebar-shortcuts button{justify-content:flex-start;gap:6px;height:32px;min-height:32px;padding:0 8px;font-size:12px;letter-spacing:0}
+.sidebar-dock.is-floating .sidebar-shortcuts .nav-glyph{display:block}
+
+/* 折叠态：对应参考图 #3 的纯图标条 + 「…」更多。停靠时竖排，浮动时横排。 */
+.sidebar-rail{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;width:36px;flex:0 0 36px;min-height:0;padding:6px 0 8px;background:var(--panel);border-right:1px solid var(--line)}
+.sidebar-rail-icons{display:flex;flex-direction:column;align-items:center;gap:4px}
+.sidebar-rail-icon{width:28px;height:28px;min-width:28px;min-height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--text);opacity:.78;font-size:17px;line-height:1}
+.sidebar-rail-icon:hover{opacity:1;color:var(--accent);background:var(--raised-hover)}
+.sidebar-rail-icon.is-active{opacity:1;color:var(--accent);border-color:var(--accent-line);background:var(--accent-wash)}
+.sidebar-rail-icon .nav-glyph{width:16px;height:16px}
+.sidebar-rail-more{width:28px;height:18px;min-width:28px;min-height:18px;padding:0;border:0;background:transparent;color:var(--text);opacity:.7;font:14px/1 var(--mono);letter-spacing:1px}
+.sidebar-rail-more:hover,.sidebar-rail-more[aria-expanded=true]{color:var(--accent)}
+.sidebar-rail-popover{position:absolute;left:calc(100% + 6px);top:6px;z-index:70;width:172px;padding:5px;background:var(--raised-2);border:1px solid var(--line-strong);border-radius:6px;box-shadow:var(--shadow-lg,0 12px 32px #0009)}
+.sidebar-rail-popover button{display:flex;align-items:center;gap:8px;width:100%;min-height:30px;height:30px;padding:0 8px;justify-content:flex-start;text-align:left;font-size:12px;color:var(--text);border:0;background:transparent}
+.sidebar-rail-popover button:hover{background:var(--raised-hover)}
+.sidebar-rail-popover button.is-active{color:var(--accent)}
+.sidebar-rail-popover .nav-glyph{width:14px;height:14px;color:var(--muted)}
+.sidebar-rail-popover hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+/* .workspace-v2 button 的 min-height:32px 会盖掉小图标按钮，这里用更高优先级收回尺寸。 */
+.workspace-v2 .sidebar-rail .sidebar-rail-icon{width:28px;height:28px;min-width:28px;min-height:28px}
+.workspace-v2 .sidebar-rail .sidebar-rail-more{width:28px;height:16px;min-width:28px;min-height:16px;font:13px/1 var(--mono)}
+.sidebar-dock.is-floating.is-collapsed{width:auto;height:auto;overflow:visible;border:0;border-radius:0;box-shadow:none;background:transparent}
+.sidebar-dock.is-floating.is-collapsed .sidebar-dock-grip{height:9px;flex-basis:9px;border:1px solid var(--line-strong);border-bottom:0;border-radius:8px 8px 0 0;background:var(--panel)}
+/* 停靠态的 flex-basis:36px 是宽度；浮动态改成纵向布局后必须还原成 auto，否则会把「…」挤到边框外。 */
+.sidebar-dock.is-floating.is-collapsed .sidebar-rail{flex:0 0 auto;flex-direction:column;align-items:center;width:auto;min-width:210px;gap:2px;padding:4px 12px 3px;border:1px solid var(--line-strong);border-top:0;border-radius:0 0 8px 8px;box-shadow:var(--shadow-lg,0 12px 32px #0009)}
+.sidebar-dock.is-floating.is-collapsed .sidebar-rail:before{content:'';position:absolute;left:0;top:6px;bottom:6px;width:2px;border-radius:2px;background:var(--accent)}
+.sidebar-dock.is-floating.is-collapsed .sidebar-rail-icons{flex-direction:row;gap:12px}
+.sidebar-dock.is-floating.is-collapsed .sidebar-rail-popover{left:50%;top:calc(100% + 6px);transform:translateX(-50%)}
+@media(max-width:760px){.sidebar-dock.is-floating{width:min(248px,calc(100vw - 24px))}}

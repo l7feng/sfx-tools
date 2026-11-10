@@ -35,6 +35,24 @@
 .asset-detail .bwf-grid{grid-template-columns:1fr;gap:7px;margin-top:4px}
 .asset-detail .bwf-grid input{box-sizing:border-box;margin-top:3px}
 .asset-detail .detail-tag-editor textarea{box-sizing:border-box}
+/* 顶部摘要卡：名称 + 关键徽标 + 路径，替代原先把名称/格式/时长拆成多行的做法。 */
+.detail-summary{display:grid;gap:6px;padding:10px 12px 11px;border-bottom:1px solid var(--line)}
+.detail-summary strong{font-size:13px;font-weight:600;color:var(--text);line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all}
+.detail-badges{display:flex;flex-wrap:wrap;gap:4px}
+.detail-badge{padding:1px 7px;border-radius:999px;border:1px solid var(--line-subtle);background:var(--overlay);color:var(--muted);font-size:10px;line-height:1.7;white-space:nowrap}
+.detail-badge.is-favorite{border-color:color-mix(in srgb,var(--accent) 45%,transparent);color:var(--accent)}
+.detail-badge.is-warning{border-color:color-mix(in srgb,var(--danger,#e05252) 45%,transparent);color:var(--danger,#e05252)}
+.detail-summary-path{margin:0;color:var(--muted);font-family:var(--mono);font-size:10.5px;line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
+/* 收藏分组：下拉选已有分组或直接新建，保存后同时加入收藏。 */
+.detail-group-editor{display:flex;flex-direction:column;gap:7px;padding:2px 0 4px}
+.detail-group-editor label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted)}
+.detail-group-editor select,.detail-group-editor input{box-sizing:border-box;width:100%;font-size:12px}
+.detail-group-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.detail-group-actions small{flex-basis:100%;font-size:10px;color:var(--muted);line-height:1.5}
+/* 原始文件位置：常用操作收进一行小按钮，不再只给只读行。 */
+.detail-path-actions{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.detail-path-actions button{font-size:11px;padding:2px 8px;min-height:22px}
+.detail-notice{margin:8px 12px 0;font-size:11px;color:var(--accent)}
 /* 音乐信息编辑：窄栏里同样单列，标签在上、输入框在下。 */
 .detail-music-editor{display:flex;flex-direction:column;gap:7px;padding:2px 0 4px}
 .detail-music-editor label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted)}

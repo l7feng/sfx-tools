@@ -44,7 +44,7 @@ function App(){
  const select=(a:Asset)=>{setSelected(a.id);setPosition(0);setPlaying(false);};
  const toggleFavorite=(id:number)=>{setFavorites(old=>{const next=new Set(old);next.has(id)?next.delete(id):next.add(id);return next;});};
  const togglePlay=()=>{setPlaying(v=>!v);if(position>=current.duration)setPosition(0);};
- useEffect(()=>{document.title='SFX Tools · S1.1 界面样稿';},[]);
+ useEffect(()=>{document.title='SFX TOOLS · S1.1 界面样稿';},[]);
  useEffect(()=>{if(dialog)dialogRef.current?.showModal();else dialogRef.current?.close();},[dialog]);
  useEffect(()=>{if(!playing)return;const timer=window.setInterval(()=>setPosition(p=>p+.1>=current.duration?(loop?0:current.duration):p+.1),100);return()=>clearInterval(timer);},[playing,current.duration,loop]);
  useEffect(()=>{if(playing&&!loop&&position>=current.duration)setPlaying(false);},[position,playing,loop,current.duration]);

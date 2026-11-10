@@ -1,6 +1,6 @@
 /* 主题令牌：4 套强调色 × 明暗两种底色，共 8 种组合。
    界面样式只引用这里的变量，不再写死颜色；强调色的浅底、描边、波形色阶都由 color-mix 派生，
-   换色时不必逐条改色。默认（无 data 属性）为暗色 + 暖金。 */
+   换色时不必逐条改色。默认（无 data 属性）为暗色 + 冷蓝。 */
 :root{
  color-scheme:dark;
  --bg:#151719;--panel:#1b1d20;--raised:#222529;--raised-2:#1c2128;
@@ -12,7 +12,7 @@
  --wave-ink:#7c807e;--cursor:#ece9d9;
  --danger:#ffb5a5;--danger-line:#ff8d7b;--warning:#e8c076;--success:#8dcbb7;
  --scrim:#080a0cbb;--shadow-lg:0 24px 80px #0008;
- --accent:#e6b675;
+ --accent:#6aa9e0;
  --accent-wash:color-mix(in srgb,var(--accent) 9%,transparent);
  --accent-line:color-mix(in srgb,var(--accent) 32%,transparent);
  --accent-line-strong:color-mix(in srgb,var(--accent) 60%,transparent);
@@ -32,6 +32,7 @@
  --danger:#b3352a;--danger-line:#c8503f;--warning:#8a6410;--success:#1f7a63;
  --scrim:#14161959;--shadow-lg:0 24px 60px #00000026;
 }
+[data-accent=gold]{--accent:#e6b675}
 [data-accent=blue]{--accent:#6aa9e0}
 [data-accent=teal]{--accent:#58c4a3}
 [data-accent=violet]{--accent:#a98bd8}

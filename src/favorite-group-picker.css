@@ -1,0 +1,4 @@
+/** 收藏分组浮层在播放列表浮层基础上加一条「清除分组」，其余样式复用。 */
+.favorite-group-picker{max-width:300px}
+.favorite-group-picker .playlist-picker-list>button.favorite-group-clear{color:var(--muted);border-top:1px solid var(--line);margin-top:3px;padding-top:8px;border-radius:0 0 4px 4px}
+.favorite-group-picker .playlist-picker-list>button.favorite-group-clear:hover{color:var(--text);background:var(--raised-hover)}

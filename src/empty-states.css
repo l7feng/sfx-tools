@@ -1,0 +1,18 @@
+/* 空状态统一排版：图标 + 主标题 + 说明两行层级，窄面板里垂直居中，
+   不再把一段 12px 说明文字顶在左上角。跟随主题令牌，浅色主题同样可读。 */
+.inspector-empty{display:flex;flex-direction:column;height:100%;min-height:0}
+.panel-empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:18px 20px 40px;text-align:center}
+.panel-empty-icon{width:46px;height:46px;display:grid;place-items:center;border:1px solid var(--line);border-radius:50%;background:var(--raised);color:var(--accent);opacity:.9}
+.panel-empty-icon svg{width:22px;height:22px}
+.panel-empty-state strong{font-size:13px;font-weight:500;color:var(--text);letter-spacing:.2px}
+.panel-empty-state p{margin:0;max-width:200px;font-size:11.5px;line-height:1.75;color:var(--muted)}
+
+/* 波形区：高度由 --wave-height 控制，空状态在区内居中，不做大字号撑满。 */
+.real-wave-area .wave-message{height:100%;display:flex;align-items:center;justify-content:center;gap:8px;margin:0;padding:0 14px;font-size:12px;line-height:1.6;color:var(--muted);text-align:center}
+.wave-empty-state{height:100%;display:flex;align-items:center;justify-content:center;gap:11px;padding:0 16px}
+.wave-empty-icon{width:32px;height:32px;flex:0 0 32px;display:grid;place-items:center;border:1px solid var(--line);border-radius:8px;background:var(--raised);color:var(--accent);opacity:.85}
+.wave-empty-icon svg{width:18px;height:18px}
+.wave-empty-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
+.wave-empty-copy strong{font-size:12px;font-weight:500;color:var(--text);white-space:nowrap}
+.wave-empty-copy span{font-size:11px;line-height:1.5;color:var(--muted)}
+@media(max-width:900px){.wave-empty-state{gap:8px}.wave-empty-copy strong{font-size:11px}.wave-empty-copy span{font-size:10px}}

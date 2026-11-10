@@ -1,4 +1,4 @@
-.catalog-shell .sidebar{width:min(var(--sidebar-width,258px),30vw)}
+.catalog-shell .sidebar{width:var(--sidebar-width,258px)}
 .catalog-shell .inspector{width:min(var(--inspector-width,282px),32vw)}
 .catalog-shell .real-wave-area{height:min(var(--wave-height,80px),30vh)}
 .resize-handle{position:relative;flex-shrink:0;touch-action:none;user-select:none;background:var(--line);z-index:2}
@@ -18,5 +18,4 @@
 .relocate-panel label{display:block;margin-top:8px}.relocate-panel input{width:100%;margin-top:6px}.relocate-panel small{display:block;overflow-wrap:anywhere}
 .catalog-shell .filterbar{flex-wrap:wrap}.catalog-shell .rate-col{display:table-cell}
 .catalog-shell .statusbar>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media(max-width:1000px){.catalog-shell .sidebar{width:min(var(--sidebar-width),22vw)}.catalog-shell .inspector{width:min(var(--inspector-width),28vw)}}
-@media(max-width:760px){.catalog-shell .sidebar,.catalog-shell .inspector{width:100%}.workspace>.resize-x{display:none}}
+@media(max-width:1000px){.catalog-shell .inspector{width:min(var(--inspector-width),28vw)}}

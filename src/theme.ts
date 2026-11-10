@@ -2,8 +2,8 @@ import {useEffect,useState} from 'react';
 
 /** 主题：4 套强调色 × 明暗两种底色。值写进 <html> 的 data 属性，由 theme.css 消费。 */
 export const THEME_ACCENTS=[
- {value:'gold',label:'暖金'},
  {value:'blue',label:'冷蓝'},
+ {value:'gold',label:'暖金'},
  {value:'teal',label:'青绿'},
  {value:'violet',label:'紫罗兰'},
 ]as const;
@@ -17,8 +17,8 @@ const isAccent=(value:unknown):value is ThemeAccent=>THEME_ACCENTS.some(item=>it
 export function readTheme():{mode:ThemeMode;accent:ThemeAccent}{
  try{
   const raw=JSON.parse(localStorage.getItem(THEME_KEY)||'{}') as {mode?:string;accent?:string};
-  return {mode:raw.mode==='light'?'light':'dark',accent:isAccent(raw.accent)?raw.accent:'gold'};
- }catch{return {mode:'dark',accent:'gold'};}
+  return {mode:raw.mode==='light'?'light':'dark',accent:isAccent(raw.accent)?raw.accent:'blue'};
+ }catch{return {mode:'dark',accent:'blue'};}
 }
 
 export function applyTheme(mode:ThemeMode,accent:ThemeAccent){

@@ -5,12 +5,12 @@ import {displayPath,formatBytes,type CatalogAsset} from './catalog-client';
 import {pruneLayer,refreshLayerAssets,getLayerAssetIds} from './layer-tools';
 import {PIN_COLORS,pinColorLabel,type Pin} from './pin-colors';
 export type ContextTarget={x:number;y:number;folder?:string;assets?:CatalogAsset[]};
-export type LibraryOverview={tags:{name:string;count:number}[];playlists:{id:string;name:string;count:number}[];pins:Pin[];history_count:number};
+export type LibraryOverview={tags:{name:string;count:number}[];playlists:{id:string;name:string;count:number}[];pins:Pin[];history_count:number;favorite_count:number;favorite_ungrouped:number;favorite_groups:{name:string;count:number}[]};
 type Edit={kind:string;target:ContextTarget};
 type SourcePreview={token:string;action:string;path:string;destination:string|null;files:number;bytes:number;catalog_items:number;unindexed_files:number;warning:string};
 type RemovePreview={token:string;directories:number;assets:number;bytes:number;favorites:number;tags:number;notes:number;playlists:number;history:number;paths:string[]};
 const leaf=(path:string)=>displayPath(path).split(/[\\/]/).filter(Boolean).at(-1)??path;
-export function CatalogContext({target,library,overview,onClose,onChanged,notify,onSimilar,onLayer}:{target:ContextTarget|null;library:'sound'|'music';overview:LibraryOverview;onClose:()=>void;onChanged:(clearSelection?:boolean)=>void;notify:(message:string)=>void;onSimilar:(asset:CatalogAsset)=>void;onLayer:(assets:CatalogAsset[],scatter:boolean)=>void}){
+export function CatalogContext({target,library,overview,onClose,onChanged,notify,onLayer,onFavoriteGroup}:{target:ContextTarget|null;library:'sound'|'music';overview:LibraryOverview;onClose:()=>void;onChanged:(clearSelection?:boolean)=>void;notify:(message:string)=>void;onLayer:(assets:CatalogAsset[],scatter:boolean)=>void;onFavoriteGroup:(assets:CatalogAsset[],x:number,y:number)=>void}){
  const [edit,setEdit]=useState<Edit|null>(null),[value,setValue]=useState(''),[playlist,setPlaylist]=useState(''),[preview,setPreview]=useState<SourcePreview|null>(null),[removal,setRemoval]=useState<RemovePreview|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const dialog=useRef<HTMLDialogElement>(null),lock=useRef(false),revision=useRef(0);
  const ids=(t:ContextTarget)=>(t.assets??[]).map(a=>a.id);
@@ -43,8 +43,8 @@ export function CatalogContext({target,library,overview,onClose,onChanged,notify
   {label:'删除整个磁盘文件夹',icon:'⌫',danger:true,detail:'包含未入库文件。移入系统回收站；不支持时停止，不自动永久删除。',run:()=>begin('trash',t)}
  );}
  else if(target?.assets?.length){const t=target,a=t.assets![0],many=t.assets!.length>1;items.push(
-  {label:'查找相似音效',icon:'♧',disabled:many,detail:'依据实际音频声学特征，需先建立索引',run:()=>onSimilar(a)},
   {label:!many&&a.favorite?'取消收藏':'收藏/取消收藏',icon:'♡',separator:true,run:()=>exec(async()=>{const favorite=!t.assets!.every(a=>a.favorite);for(const asset of t.assets!)await invoke('catalog_set_favorite',{id:asset.id,favorite});onChanged();notify(favorite?'已收藏所选素材':'已取消收藏');})},
+  {label:'收藏分组…',icon:'▦',detail:'设分组会同时加入收藏',run:()=>onFavoriteGroup(t.assets!,t.x,t.y)},
   {label:'添加到播放列表',icon:'＋',run:()=>begin('playlist',t)},
   {label:'编辑标签',icon:'◇',run:()=>begin('tags',t)},
   {label:'添加到叠层',icon:'▱',separator:true,run:()=>onLayer(t.assets!,false)},

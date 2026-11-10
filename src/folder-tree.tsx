@@ -3,7 +3,7 @@ import type {FolderNode} from './catalog-client';
 import {displayPath} from './catalog-client';
 
 /** 文件夹图标：展开时画成开口文件夹，收起时用闭合轮廓，替代原来的 ▱ 字符。 */
-function FolderGlyph({open}:{open:boolean}){
+export function FolderGlyph({open}:{open:boolean}){
  return <svg className="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
   {open
    ?<><path d="M3 9V7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.4.6L11.4 7H19a2 2 0 0 1 2 2v1"/><path d="M3 9h17.2a1.6 1.6 0 0 1 1.56 1.96l-1.5 7.2A2 2 0 0 1 18.3 19.8H5.7a2 2 0 0 1-1.96-1.64L3 9z"/></>

@@ -20,10 +20,11 @@ export const availableColumns=(library:LibraryKind)=>columnDefinitions.filter(co
 export type Layout={sidebar:number;inspector:number;wave:number;columns:number[];columnOrder:ColumnId[];hiddenColumns:ColumnId[];details:boolean;topCollapsed:boolean;leftCollapsed:boolean;bottomCollapsed:boolean};
 export const defaultLayout:Layout={sidebar:220,inspector:260,wave:110,columns:[32,200,100,96,68,68,64,52,68,64,36,44],columnOrder:[...allColumnIds],hiddenColumns:['format'],details:true,topCollapsed:false,leftCollapsed:false,bottomCollapsed:false};
 export const clamp=(value:number,min:number,max:number)=>Math.min(max,Math.max(min,value));
-/** 旧版列宽数组（6 项含状态列 / 5 项未含波形列）按列名回填，其余取新默认宽度。 */
+/** 当前列数的存档原样保留宽度（safeLayout 再逐项夹取）；旧版 6 项含状态列 / 5 项未含波形列按列名回填；其余取新默认宽度。 */
 function migrateColumns(raw:unknown):number[]{
  const widths=[...defaultLayout.columns];
  if(!Array.isArray(raw))return widths;
+ if(raw.length===widths.length)return widths.map((fallback,index)=>typeof raw[index]==='number'&&Number.isFinite(raw[index])?raw[index] as number:fallback);
  const legacy:ColumnId[][]=[['name','wave','duration','rate','format','status' as ColumnId],['name','duration','rate','format','status' as ColumnId]];
  const order=legacy.find(item=>item.length===raw.length);
  if(!order)return widths;

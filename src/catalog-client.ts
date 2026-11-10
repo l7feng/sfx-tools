@@ -1,4 +1,4 @@
-export type CatalogAsset={id:string;path:string;name:string;format:string;size:number;modified:string;rate:number|null;channels:number|null;duration:number|null;status:string;error:string|null;favorite:boolean;tags:string[]};
+export type CatalogAsset={id:string;path:string;name:string;format:string;size:number;modified:string;rate:number|null;channels:number|null;duration:number|null;status:string;error:string|null;favorite:boolean;favorite_group?:string|null;tags:string[]};
 export type CatalogPage={items:CatalogAsset[];total:number};
 export type FolderNode={path:string;parent:string|null;name:string;count:number};
 export function displayPath(path:string){return path.startsWith('\\\\?\\UNC\\')?'\\\\'+path.slice(8):path.startsWith('\\\\?\\')?path.slice(4):path;}

@@ -49,7 +49,7 @@ export function BwfMetadataPanel({assetId,onSaved,disabled,injected,useInjected,
   }catch(e){setError(String(e));}finally{setBusy(false);}
  }
 
- if(readError||error)return <div className="bwf-body"><p className="description">{readError||error}</p><p className="bwf-hint">内嵌元数据只适用于 WAV/BWF；MP3、FLAC、AIFF 的原文件不写入标签。</p></div>;
+ if(readError||error)return <div className="bwf-body"><p className="description">{readError||error}</p><p className="bwf-hint">内嵌元数据只适用于 WAV/BWF；MP3、FLAC、AIFF、M4A 的原文件不写入标签。</p></div>;
  if(!meta)return <div className="bwf-body"><p className="description">读取中…</p></div>;
 
  return <div className="bwf-body">

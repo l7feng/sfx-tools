@@ -1,0 +1,69 @@
+/* 通用浮窗交互：靠近停靠边时的半透明预览、四边磁吸提示、右下角尺寸手柄。
+   侧栏（吸附回左侧）与波形播放器（吸附回底部）共用，样式跟随主题令牌。 */
+.dock-snap-target{position:fixed;z-index:55;pointer-events:none;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px dashed var(--accent);border-radius:8px;color:var(--accent);font-size:12px;letter-spacing:.5px;box-shadow:inset 0 0 34px color-mix(in srgb,var(--accent) 9%,transparent)}
+.dock-snap-target span{background:var(--panel);border:1px solid var(--accent-line);border-radius:999px;padding:5px 12px;white-space:nowrap}
+.dock-snap-target.is-left{left:6px;top:6px;bottom:6px}
+.dock-snap-target.is-bottom{left:6px;right:6px;bottom:6px}
+.dock-snap-target.is-bottom span{align-self:flex-start;margin-top:10px}
+.dock-snap-edge{position:fixed;z-index:55;pointer-events:none;background:color-mix(in srgb,var(--accent) 48%,transparent);box-shadow:0 0 12px var(--accent)}
+.dock-snap-edge.is-left{left:0;top:0;bottom:0;width:5px}
+.dock-snap-edge.is-right{right:0;top:0;bottom:0;width:5px}
+.dock-snap-edge.is-top{left:0;right:0;top:0;height:5px}
+.dock-snap-edge.is-bottom{left:0;right:0;bottom:0;height:5px}
+.dock-resize-handle{position:absolute;right:0;bottom:0;width:18px;height:18px;z-index:5;cursor:nwse-resize;touch-action:none;user-select:none;display:grid;place-items:end;padding:3px}
+.dock-resize-handle i{display:block;width:9px;height:9px;border-right:2px solid var(--accent);border-bottom:2px solid var(--accent);border-radius:0 0 2px 0;opacity:.7}
+.dock-resize-handle:hover i,.dock-resize-handle:focus-visible i{opacity:1}
+.dock-resize-handle:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.sidebar-dock.is-floating,.player-dock.is-floating{max-width:calc(100vw - 12px);max-height:calc(100vh - 12px)}
+
+/* 播放器浮窗：整块 fixed，顶部是拖动手柄，内部播放器纵向铺满。 */
+.player-dock.is-floating{position:fixed;z-index:60;display:flex;flex-direction:column;border:1px solid var(--line-strong);border-radius:8px;background:var(--panel);box-shadow:var(--shadow-lg,0 18px 48px #0009);overflow:hidden}
+.player-dock.is-floating .dock-grip{flex:0 0 12px;width:100%;flex-direction:row;align-self:auto;border-right:0;border-bottom:1px solid var(--line);gap:4px;cursor:grab;touch-action:none;user-select:none;display:flex;align-items:center;justify-content:center;background:var(--overlay-weak)}
+.player-dock.is-floating .dock-grip i{width:16px;height:2px;border-radius:2px;background:var(--muted);opacity:.8}
+.player-dock.is-floating.is-dragging .dock-grip{cursor:grabbing;background:var(--accent-wash)}
+.player-dock.is-floating .real-player{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;padding:8px 12px 6px;border-top:0}
+.player-dock.is-floating .real-wave-area{height:auto;flex:1;min-height:76px}
+.player-dock.is-floating .player-heading{flex:0 0 auto}
+.player-dock.is-floating .transport{flex:0 0 auto}
+
+/* 播放器落位切换：三个小按钮跟在标题栏右侧，窄侧栏里只留图标。 */
+.workspace-v2 .player-heading>.player-placement{display:flex;align-items:center;gap:2px;flex:0 0 auto;min-width:0;margin-left:4px}
+.workspace-v2 .player-placement button{min-width:26px;max-width:none;min-height:24px;height:24px;padding:0 5px;display:inline-flex;align-items:center;gap:3px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--muted);font-size:10px;line-height:1;white-space:nowrap}
+.workspace-v2 .player-placement button:hover{color:var(--text);background:var(--raised-hover);border-color:var(--line)}
+.workspace-v2 .player-placement button[aria-pressed=true]{color:var(--accent);border-color:var(--accent-line);background:var(--accent-wash)}
+.player-placement .placement-icon{font:12px/1 var(--mono)}
+.sidebar-player .player-placement button>span:last-child{display:none}
+
+/* 播放器收进左侧栏：独立小面板，紧凑排版，不挤掉目录树。 */
+.sidebar-player{flex:0 0 auto;max-height:52%;display:flex;flex-direction:column;margin-top:8px;border-top:1px solid var(--line);padding-top:4px;overflow:hidden}
+.sidebar-player .real-player{display:flex;flex-direction:column;padding:0;overflow:auto;min-height:0}
+.sidebar-player .player-heading{gap:4px;margin-bottom:4px;min-height:22px;flex-wrap:wrap}
+.sidebar-player .player-heading>div{gap:5px;min-width:0}
+.sidebar-player .player-heading strong{font-size:11px;max-width:96px}
+.sidebar-player .player-spec,.sidebar-player .player-footnote,.sidebar-player .wave-analysis-note{display:none}
+.sidebar-player .real-wave-area{height:72px;flex:0 0 72px}
+.sidebar-player .wave-empty-icon{display:none}
+.sidebar-player .wave-empty-copy strong{font-size:10.5px;white-space:normal}
+.sidebar-player .wave-empty-copy span{font-size:10px}
+.sidebar-player .transport{flex-wrap:wrap;gap:4px;padding-top:5px}
+.sidebar-player .play-button{width:26px;height:26px;min-height:26px}
+.sidebar-player .time-readout{font-size:12px;margin-left:2px}
+.sidebar-player .volume{font-size:10px;gap:4px}
+.sidebar-player .volume input{width:56px}
+.sidebar-player .full-seek{font-size:10px;gap:4px;flex-wrap:wrap}
+.sidebar-player .full-seek>span{display:none}
+.sidebar-player .wave-view-controls{font-size:10px;gap:4px;flex-wrap:wrap}
+.sidebar-player .wave-view-controls select{font-size:10px;min-height:22px}
+.sidebar-player .audio-toolbar{flex-wrap:wrap}
+
+/* 音频工具页「工具 / 管理」两窗口：停靠时左右平分主区，浮动时与播放器浮窗同一套 fixed 行为。 */
+.tools-windows{flex:1;min-width:0;min-height:0;display:flex;gap:10px;padding:10px 14px}
+.tools-window{flex:1;min-width:280px;min-height:0;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;background:var(--panel);overflow:hidden}
+.tools-window .sidebar-dock-grip{flex:0 0 10px;width:100%;flex-direction:row;align-self:auto;border-right:0;border-bottom:1px solid var(--line);gap:4px}
+.tools-window .sidebar-dock-grip i{width:14px;height:2px;border-radius:2px}
+.tools-window>.panel-heading{padding:0 12px;border-bottom:1px solid var(--line);cursor:grab;touch-action:none;user-select:none}
+.tools-window .audio-tools-page{flex:1;min-height:0;padding:14px}
+.tools-window.is-floating{position:fixed;z-index:60;max-width:calc(100vw - 12px);max-height:calc(100vh - 12px);border-color:var(--line-strong);box-shadow:var(--shadow-lg,0 18px 48px #0009)}
+.tools-window.is-dragging{user-select:none}
+.tools-window.is-dragging .sidebar-dock-grip,.tools-window.is-dragging>.panel-heading{cursor:grabbing;background:var(--accent-wash)}
+@media(max-width:760px){.tools-windows{flex-direction:column;overflow:auto}.tools-window{flex:0 0 auto;min-height:340px}}

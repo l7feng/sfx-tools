@@ -12,13 +12,18 @@ const {ToolsPage}=await import(pathToFileURL(path.resolve('build/tool-navigation
 const noop=()=>{};
 const base={native:false,ids:[],selected:null,library:'sound',query:'',active:null,onNavigate:noop,onClearQuery:noop,onBack:noop,onPick:noop,onChanged:noop,onCheck:noop,onJobs:noop,busy:false};
 const render=props=>renderToStaticMarkup(React.createElement(ToolsPage,{...base,...props}));
-test('库内管理渲染八个分类及无选择提示',()=>{
+test('管理窗口渲染六个分类及无选择提示，工具窗口渲染三个制作分类',()=>{
  const html=render({});
- assert.equal((html.match(/aria-pressed="false"/g)??[]).slice(0,8).length,8);
+ assert.equal((html.match(/aria-pressed="false"/g)??[]).slice(0,6).length,6);
  const nav=html.match(/<nav[^>]*aria-label="音频工具分类"[^>]*>(.*?)<\/nav>/s)?.[1];
- assert(nav);assert.equal((nav.match(/<button/g)??[]).length,8);
- for(const label of ['以声搜声与模型','UCS 分类建议','重复素材','账号与授权'])assert(nav.includes(label));
- assert(html.includes('尚未选择素材'));assert(html.includes('去素材库选择'));
+ assert(nav);assert.equal((nav.match(/<button/g)??[]).length,6);
+ for(const label of ['UCS 分类建议','重复素材','叠层编排','账号与授权'])assert(nav.includes(label));
+ assert(html.includes('尚未选择素材'));assert(html.includes('去素材库选择'));assert(html.includes('<h1>管理</h1>'));
+ const production=render({area:'production'});
+ const prodNav=production.match(/<nav[^>]*aria-label="音频工具分类"[^>]*>(.*?)<\/nav>/s)?.[1];
+ assert(prodNav);assert.equal((prodNav.match(/<button/g)??[]).length,3);
+ for(const label of ['批量导出与转换','插件与制作连接','Pro Tools 导入预览'])assert(prodNav.includes(label));
+ assert(production.includes('<h1>工具</h1>'));
 });
 test('分类直达展开相应制作操作，账号直达展开而非空壳标题',()=>{
  const convert=render({active:'convert',area:'production'});
