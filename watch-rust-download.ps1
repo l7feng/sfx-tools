@@ -1,10 +1,10 @@
 ﻿param([switch]$Once)
 
 # 只读观察当前项目的 Rust 1.99.1 下载，不启动或中断安装。
-$downloadRoot = 'D:/Ai-Files/Tools/BuildEnv/sound-workbench-rust/rustup/downloads'
+$downloadRoot = 'D:/Ai-Files/Tools/BuildEnv/sfx-tools-rust/rustup/downloads'
 $hash = '7da83c2af1f209606b0160f25174d2867c7c7b73667c32c9e5fbcef4f5f45348'
 $total = 77075164L
-$compiler = 'D:/Ai-Files/Tools/BuildEnv/sound-workbench-rust/rustup/toolchains/stable-x86_64-pc-windows-msvc/bin/rustc.exe'
+$compiler = 'D:/Ai-Files/Tools/BuildEnv/sfx-tools-rust/rustup/toolchains/stable-x86_64-pc-windows-msvc/bin/rustc.exe'
 $lastBytes = $null
 $lastTime = Get-Date
 Write-Host 'Rust 编译器下载进度（每秒刷新，Ctrl+C 退出）' -ForegroundColor Cyan

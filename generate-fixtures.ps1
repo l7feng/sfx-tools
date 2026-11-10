@@ -8,6 +8,7 @@ $cases = @(
     @{ Name='pcm-48000.aiff'; Codec='pcm_s16be'; Encoder='pcm_s16be'; Rate=48000; Duration='0.5'; Min=0.49; Max=0.51; Format='aiff' },
     @{ Name='lossless-48000.flac'; Codec='flac'; Encoder='flac'; Rate=48000; Duration='0.5'; Min=0.49; Max=0.51; Format='flac' },
     @{ Name='lossy-44100.mp3'; Codec='mp3'; Encoder='libmp3lame'; Rate=44100; Duration='0.5'; Min=0.45; Max=0.65; Format='mp3' },
+    @{ Name='aac-44100.m4a'; Codec='aac'; Encoder='aac'; Rate=44100; Duration='0.5'; Min=0.45; Max=0.56; Format='mp4' },
     @{ Name='long-44100.wav'; Codec='pcm_s16le'; Encoder='pcm_s16le'; Rate=44100; Duration='5'; Min=4.99; Max=5.01; Format='wav' }
 )
 

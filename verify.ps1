@@ -1,7 +1,7 @@
 ﻿param([ValidateSet('check','test','build','dev')][string]$Action='check')
 $ErrorActionPreference='Stop'
-$env:CARGO_HOME='D:/Ai-Files/Tools/BuildEnv/sound-workbench-rust/cargo'
-$env:RUSTUP_HOME='D:/Ai-Files/Tools/BuildEnv/sound-workbench-rust/rustup'
+$env:CARGO_HOME='D:/Ai-Files/Tools/BuildEnv/sfx-tools-rust/cargo'
+$env:RUSTUP_HOME='D:/Ai-Files/Tools/BuildEnv/sfx-tools-rust/rustup'
 $env:PATH="$env:CARGO_HOME/bin;$env:PATH"
 $env:RUSTUP_TOOLCHAIN='stable-x86_64-pc-windows-msvc'
 $env:RUSTUP_AUTO_INSTALL='0'
