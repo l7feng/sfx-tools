@@ -26,6 +26,13 @@
 .player-dock.is-floating .player-heading{flex:0 0 auto}
 .player-dock.is-floating .transport{flex:0 0 auto}
 
+/* 导入任务浮窗：复用播放器浮窗行为；停靠态仍是右下角固定小面板。 */
+.import-jobs-dock.is-floating{position:fixed;z-index:60;display:flex;flex-direction:column;border:1px solid var(--line-strong);border-radius:8px;background:var(--panel);box-shadow:var(--shadow-lg,0 18px 48px #0009);overflow:hidden;max-width:calc(100vw - 12px);max-height:calc(100vh - 12px)}
+.import-jobs-dock.is-floating .dock-grip{flex:0 0 12px;width:100%;flex-direction:row;align-self:auto;border-right:0;border-bottom:1px solid var(--line);gap:4px;cursor:grab;touch-action:none;user-select:none;display:flex;align-items:center;justify-content:center;background:var(--overlay-weak)}
+.import-jobs-dock.is-floating .dock-grip i{width:16px;height:2px;border-radius:2px;background:var(--muted);opacity:.8}
+.import-jobs-dock.is-floating.is-dragging .dock-grip{cursor:grabbing;background:var(--accent-wash)}
+.import-jobs-dock.is-floating .log-panel.import-jobs{position:relative;inset:auto;bottom:auto;right:auto;flex:1;min-height:0;width:100%;max-height:none;box-sizing:border-box;margin:0;border:0;border-top:1px solid var(--line);border-radius:0;box-shadow:none;overflow:auto}
+
 /* 播放器落位切换：三个小按钮跟在标题栏右侧，窄侧栏里只留图标。 */
 .workspace-v2 .player-heading>.player-placement{display:flex;align-items:center;gap:2px;flex:0 0 auto;min-width:0;margin-left:4px}
 .workspace-v2 .player-placement button{min-width:26px;max-width:none;min-height:24px;height:24px;padding:0 5px;display:inline-flex;align-items:center;gap:3px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--muted);font-size:10px;line-height:1;white-space:nowrap}

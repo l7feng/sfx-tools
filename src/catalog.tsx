@@ -4,7 +4,7 @@ import {invoke,isTauri} from '@tauri-apps/api/core';
 import {getCurrentWebview} from '@tauri-apps/api/webview';
 import {formatBytes,jobLabels,resumable,displayPath} from './catalog-client';
 import type {CatalogAsset,CatalogPage,ImportJob,FolderNode} from './catalog-client';
-import {FolderTree,FolderGlyph} from './folder-tree';
+import {FolderTree} from './folder-tree';
 import {NativePlayer} from './native-player';
 import {AssetDetail} from './asset-detail';
 import {timeLabel} from './demo-data';
@@ -21,7 +21,7 @@ import {Settings} from './settings';
 import {AccountMenu} from './account-menu';
 import {SidebarQuickPanel,type SidebarPanel,type SidebarPanelKind} from './sidebar-quick';
 import {SidebarDockFrame,SidebarIconRail,NavGlyph,useSidebarDock,type RailItem} from './sidebar-dock';
-import {DockFrame} from './panel-dock';
+import {DockFrame,usePanelDock} from './panel-dock';
 import {usePlayerView,type PlayerPlacement} from './player-dock';
 import {CatalogContext,type ContextTarget,type LibraryOverview} from './catalog-context';
 import {searchFolder,type SearchScope} from './search-scope';
@@ -95,18 +95,10 @@ function Catalog(){
  const [extraTags,setExtraTags]=useState<string[]>([]);
  // 「隐藏不可用素材」是列表级过滤：与搜索关键词、格式、收藏等条件同时进入后端查询，避免只在前端遮住当前页。
  const [hideUnavailable,setHideUnavailable]=useState(()=>{try{return localStorage.getItem('sound-workbench-hide-unavailable-v1')==='1';}catch{return false;}});
- // 左侧栏收藏分组：高度、折叠、隐藏三项都持久化，避免每次重开窗口复位。
- const [favoriteTreeHeight,setFavoriteTreeHeight]=useState(()=>{try{const value=Number(localStorage.getItem('sound-workbench-favorite-tree-height-v1'));return Number.isFinite(value)&&value>=80&&value<=600?value:200;}catch{return 200;}});
- const [favoriteTreeCollapsed,setFavoriteTreeCollapsed]=useState(()=>{try{return localStorage.getItem('sound-workbench-favorite-tree-collapsed-v1')==='1';}catch{return false;}});
- const [favoriteTreeHidden,setFavoriteTreeHidden]=useState(()=>{try{return localStorage.getItem('sound-workbench-favorite-tree-hidden-v1')==='1';}catch{return false;}});
- useEffect(()=>{try{localStorage.setItem('sound-workbench-hide-unavailable-v1',hideUnavailable?'1':'0');localStorage.setItem('sound-workbench-favorite-tree-height-v1',String(favoriteTreeHeight));localStorage.setItem('sound-workbench-favorite-tree-collapsed-v1',favoriteTreeCollapsed?'1':'0');localStorage.setItem('sound-workbench-favorite-tree-hidden-v1',favoriteTreeHidden?'1':'0');}catch{/* 本地存储不可用时不阻断界面 */}},[hideUnavailable,favoriteTreeHeight,favoriteTreeCollapsed,favoriteTreeHidden]);
- const startFavoriteTreeResize=(event:React.PointerEvent<HTMLDivElement>)=>{
-  event.preventDefault();const startY=event.clientY,startHeight=favoriteTreeHeight;
-  const move=(next:PointerEvent)=>setFavoriteTreeHeight(Math.max(80,Math.min(600,startHeight+next.clientY-startY)));
-  const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);};
-  window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);
- };
+ useEffect(()=>{try{localStorage.setItem('sound-workbench-hide-unavailable-v1',hideUnavailable?'1':'0');}catch{/* 本地存储不可用时不阻断界面 */}},[hideUnavailable]);
  const [root,setRoot]=useState(''),[confirmedRoot,setConfirmedRoot]=useState(''),[open,setOpen]=useState(false),[showJobs,setShowJobs]=useState(false),[trackedId,setTrackedId]=useState(''),[importLibrary,setImportLibrary]=useState<Library>(library);
+ // 导入任务面板：停靠态固定在右下角；浮动后可拖动、右下角可调尺寸，位置与尺寸各自存档。
+ const {dock:jobsDock,setDock:setJobsDock}=usePanelDock('sound-workbench-jobs-dock-v1',{x:Math.max(0,(typeof window==='undefined'?1440:window.innerWidth)-470),y:Math.max(0,(typeof window==='undefined'?940:window.innerHeight)-440),width:440,height:380});
  const [folders,setFolders]=useState<FolderNode[]>([]),[folder,setFolder]=useState<string|null>(null),[history,setHistory]=useState<string[]>([]),[dragging,setDragging]=useState(false);
  const views=useRef<Record<Library,View>>({sound:emptyView(),music:emptyView()}),anchor=useRef<string|null>(null),list=useRef<HTMLDivElement>(null);
  const treeStamp=useRef(''),dropHandler=useRef<(paths:string[])=>void>(()=>{}),reportedProblems=useRef(new Set<string>());
@@ -256,7 +248,7 @@ function Catalog(){
  const toggleJobs=()=>{setSidebarPanel(null);setShowJobs(value=>!value);};
  const openKind=(kind:SidebarPanelKind,event:React.MouseEvent<HTMLButtonElement>)=>{const rect=event.currentTarget.getBoundingClientRect();setSidebarPanel(old=>old?.kind===kind?null:{kind,x:rect.right+6,y:rect.top});};
  const railItems:RailItem[]=[
-  {id:'favorites',label:'收藏',glyph:'favorites',active:favoritesOnly,onClick:showFavorites},
+  {id:'favorites',label:'收藏',glyph:'favorites',active:favoritesOnly,onClick:event=>openKind('favorites',event)},
   {id:'tags',label:'标签',glyph:'tags',active:!!tag,onClick:event=>openKind('tags',event)},
   {id:'history',label:'试听历史',glyph:'history',active:historyOnly,onClick:showHistory},
   {id:'playlists',label:'播放列表',glyph:'playlists',active:!!playlistId,onClick:event=>openKind('playlists',event)}
@@ -268,6 +260,8 @@ function Catalog(){
  // 同一时刻只挂载一份播放器：按落位插到底部、左侧栏或浮窗，避免重复轮询与重复波形分析。
  const playerPanel=<NativePlayer selected={selected} collapsed={playerView.placement==='bottom'&&layout.bottomCollapsed} onToggle={playerView.placement==='bottom'?()=>toggle('bottomCollapsed'):undefined} defaultVolume={preferences.volume} placement={playerView.placement} onPlacementChange={changePlayerPlacement}/>;
  const playerSnapSize=Math.max(120,layout.wave+90);
+ // 导入任务面板主体：停靠态与浮动态共用同一份 JSX，仅外壳不同。
+ const jobsPanel=<section className="log-panel import-jobs" aria-label="导入任务"><div><strong>导入任务</strong><button aria-label="浮动任务面板" title="浮动后可拖动位置、右下角可调尺寸；双击顶部拖动条可停靠回右下角" onClick={()=>setJobsDock({...jobsDock,floating:true})}>⤢</button><button aria-label="关闭任务面板" onClick={()=>setShowJobs(false)}>×</button></div>{jobs.length?jobs.map(job=><article className="job" key={job.id}><div><strong>{jobLabels[job.status]??job.status}</strong><span>{pageNames[job.library??'sound']} · {job.processed}/{job.discovered}</span></div><p className="job-path">{displayPath(job.root)}</p><div className="job-counts">新增 {job.added} · 更新 {job.updated} · 跳过 {job.skipped} · 失败 {job.failed}</div>{job.error&&<p className="asset-error">{job.error}</p>}<div className="job-actions">{job.status==='running'&&<button disabled={busy} onClick={()=>void action(async()=>{await invoke('catalog_cancel',{id:job.id});setStatus('已请求取消扫描');await refresh();})}>取消扫描</button>}{!running&&<button disabled={busy} onClick={()=>void action(async()=>{const recovering=resumable(job);const id=await invoke<string>(recovering?'catalog_resume':'catalog_start',recovering?{id:job.id}:{root:job.root,library:job.library??'sound'});setTrackedId(id);setStatus('扫描已启动');await refresh();})}>{resumable(job)?'继续扫描':'重新扫描'}</button>}</div></article>):<p>尚无导入任务。</p>}</section>;
  return <div className={`app-shell catalog-shell workspace-v2 wave-${preferences.waveColor}`} style={style}>
   {dragging&&<div className="folder-drop-overlay"><strong>松开以检查素材文件夹</strong><span>添加至{pageNames[library]} · 确认后才导入</span></div>}
   <header className={`workspace-header ${layout.topCollapsed?'is-collapsed':''}`}>
@@ -292,26 +286,13 @@ function Catalog(){
        </div>
        <nav className={`sidebar-shortcuts${shortcutsCompact?' is-compact':''}`} aria-label="素材导航">
         <button className={!folder&&!favoritesOnly&&!tag&&!historyOnly&&!playlistId?'active':''} title={`全部素材 · ${totalAssets}条`} onClick={showAll}><NavGlyph id="all"/><span className="shortcut-label">全部素材</span></button>
-        <button className={favoritesOnly?'active':''} title="收藏" onClick={showFavorites}><NavGlyph id="favorites"/><span className="shortcut-label">收藏</span></button>
+        <button className={favoritesOnly?'active':''} aria-expanded={sidebarPanel?.kind==='favorites'} aria-haspopup="dialog" title="收藏分组" onClick={event=>openKind('favorites',event)}><NavGlyph id="favorites"/><span className="shortcut-label">收藏</span></button>
         <button className={historyOnly?'active':''} title={`试听历史 · ${overview.history_count}条`} onClick={showHistory}><NavGlyph id="history"/><span className="shortcut-label">历史</span></button>
-        {(['tags','playlists'] as SidebarPanelKind[]).map(kind=>{const label=({tags:'标签',playlists:'播放列表'})[kind];return <button key={kind} className={kind==='tags'&&tag||kind==='playlists'&&playlistId?'active':''} aria-expanded={sidebarPanel?.kind===kind} aria-haspopup="dialog" title={`${label} · ${kind==='tags'?overview.tags.length:overview.playlists.length}项`} onClick={event=>openKind(kind,event)}><NavGlyph id={kind}/><span className="shortcut-label">{label}</span></button>;})}
+        {(['tags','playlists'] as ('tags'|'playlists')[]).map(kind=>{const label=({tags:'标签',playlists:'播放列表'})[kind];return <button key={kind} className={kind==='tags'&&tag||kind==='playlists'&&playlistId?'active':''} aria-expanded={sidebarPanel?.kind===kind} aria-haspopup="dialog" title={`${label} · ${kind==='tags'?overview.tags.length:overview.playlists.length}项`} onClick={event=>openKind(kind,event)}><NavGlyph id={kind}/><span className="shortcut-label">{label}</span></button>;})}
         <button title={`导入任务 · ${jobs.length}项`} aria-expanded={showJobs} onClick={toggleJobs}><NavGlyph id="jobs"/><span className="shortcut-label">导入任务</span></button>
        </nav>
        <div className="sidebar-label tree-label">路径目录</div>
        <FolderTree nodes={folders} selected={folder} onContext={(path,event)=>setContext({x:event.clientX,y:event.clientY,folder:path})} onSelect={selectFolder}/>
-       {favoriteTreeHidden
-        ?<button className="favorite-tree-restore" onClick={()=>setFavoriteTreeHidden(false)} aria-label="显示收藏分组" title="在左侧栏重新显示收藏分组">＋ 显示收藏分组</button>
-        :<section className="favorite-tree-section" aria-label="收藏分组区域">
-          <div className="sidebar-label tree-label favorite-tree-heading"><span>收藏分组</span><div className="favorite-tree-actions"><button onClick={()=>setFavoriteTreeCollapsed(value=>!value)} aria-expanded={!favoriteTreeCollapsed} aria-label={favoriteTreeCollapsed?'展开收藏分组':'折叠收藏分组'} title={favoriteTreeCollapsed?'展开收藏分组':'折叠收藏分组'}>{favoriteTreeCollapsed?'▸':'▾'}</button><button onClick={()=>setFavoriteTreeHidden(true)} aria-label="隐藏收藏分组" title="隐藏收藏分组">×</button></div></div>
-          {!favoriteTreeCollapsed&&<div className="favorite-tree-resize" style={{height:favoriteTreeHeight}}>
-           <nav className="folder-tree favorite-tree" aria-label="收藏分组文件夹树"><ul>
-        <li><div className={`folder-row${favoritesOnly&&!favoriteGroup&&!favoriteUngrouped?' selected':''}`}><button className="folder-expand" disabled tabIndex={-1} aria-hidden="true">·</button><button className="folder-select" title="全部收藏" aria-current={favoritesOnly&&!favoriteGroup&&!favoriteUngrouped?'location':undefined} onClick={()=>selectFavoriteGroup(null,false)}><span className="folder-name"><FolderGlyph open={false}/><span className="folder-text">全部收藏</span></span><small>{overview.favorite_count}</small></button></div></li>
-        {overview.favorite_groups.map(item=><li key={item.name}><div className={`folder-row${favoritesOnly&&favoriteGroup===item.name?' selected':''}`}><button className="folder-expand" disabled tabIndex={-1} aria-hidden="true">·</button><button className="folder-select" title={item.name} aria-current={favoritesOnly&&favoriteGroup===item.name?'location':undefined} onClick={()=>selectFavoriteGroup(item.name,false)}><span className="folder-name"><FolderGlyph open={false}/><span className="folder-text">{item.name}</span></span><small>{item.count}</small></button></div></li>)}
-        {overview.favorite_ungrouped>0&&<li><div className={`folder-row${favoritesOnly&&favoriteUngrouped?' selected':''}`}><button className="folder-expand" disabled tabIndex={-1} aria-hidden="true">·</button><button className="folder-select" title="未分组" aria-current={favoritesOnly&&favoriteUngrouped?'location':undefined} onClick={()=>selectFavoriteGroup(null,true)}><span className="folder-name"><FolderGlyph open={false}/><span className="folder-text">未分组</span></span><small>{overview.favorite_ungrouped}</small></button></div></li>}
-       </ul></nav>
-           <div className="favorite-tree-grip" role="slider" tabIndex={0} aria-label="收藏分组高度" aria-valuemin={80} aria-valuemax={600} aria-valuenow={favoriteTreeHeight} title="拖动调整高度，或按上下方向键微调" onPointerDown={startFavoriteTreeResize} onKeyDown={event=>{if(event.key==='ArrowUp'||event.key==='ArrowDown'){event.preventDefault();setFavoriteTreeHeight(value=>Math.max(80,Math.min(600,value+(event.key==='ArrowUp'?20:-20))));}}}/>
-          </div>}
-         </section>}
        <div className={`sidebar-pins${pinsOpen?' is-open':''}`}><button className="pins-toggle" aria-expanded={pinsOpen} aria-controls="sidebar-pin-list" onClick={()=>setPinsOpen(value=>!value)} title={pinsOpen?'收起常用路径':'展开常用路径'}><span className="pins-toggle-label">常用路径</span><b>{overview.pins.length}</b><span className="pins-toggle-caret" aria-hidden="true">{pinsOpen?'⌄':'⌃'}</span></button>{pinsOpen&&<div className="pins-list" id="sidebar-pin-list" role="list">{overview.pins.map(item=>{const name=displayPath(item.path).split(/[\\/]/).filter(Boolean).at(-1)??item.path;return <div key={item.path} role="listitem" className={`pins-row${folder===item.path?' selected':''}`} onContextMenu={event=>{event.preventDefault();event.stopPropagation();setContext({x:event.clientX,y:event.clientY,folder:item.path});}}><span className="pin-dot" data-color={item.color??'none'} aria-hidden="true"/><button className="pins-select" title={displayPath(item.path)} aria-current={folder===item.path?'location':undefined} onClick={()=>{setSidebarPanel(null);selectFolder(item.path);}}>{name}</button></div>;})}{!overview.pins.length&&<p className="pins-empty">右击目录树中的文件夹，设为常用后可标颜色。</p>}</div>}</div>
        {playerView.placement==='sidebar'&&<section className="sidebar-player" aria-label="波形预览">{playerPanel}</section>}
        <p className="sidebar-footnote">拖入文件夹添加 · 原路径引用</p>
@@ -349,12 +330,14 @@ function Catalog(){
   </>}
   {playerView.placement==='floating'&&<DockFrame dock={playerView.dock} onChange={setPlayerDock} className="player-dock" edge="bottom" dockedSize={playerSnapSize} snapLabel="松手吸附回底部">{()=>playerPanel}</DockFrame>}
   <footer className="statusbar"><span role="status" aria-live="polite">{liveStatus}</span><span className="status-version" title="当前构建版本，与 EXE 文件属性里的产品版本一致">v{appVersion||'—'}</span><button aria-expanded={showJobs} onClick={()=>setShowJobs(value=>!value)}>任务 {jobs.length} {showJobs?'⌄':'⌃'}</button></footer>
-  {showJobs&&<section className="log-panel import-jobs" aria-label="导入任务"><div><strong>导入任务</strong><button aria-label="关闭任务面板" onClick={()=>setShowJobs(false)}>×</button></div>{jobs.length?jobs.map(job=><article className="job" key={job.id}><div><strong>{jobLabels[job.status]??job.status}</strong><span>{pageNames[job.library??'sound']} · {job.processed}/{job.discovered}</span></div><p className="job-path">{displayPath(job.root)}</p><div className="job-counts">新增 {job.added} · 更新 {job.updated} · 跳过 {job.skipped} · 失败 {job.failed}</div>{job.error&&<p className="asset-error">{job.error}</p>}<div className="job-actions">{job.status==='running'&&<button disabled={busy} onClick={()=>void action(async()=>{await invoke('catalog_cancel',{id:job.id});setStatus('已请求取消扫描');await refresh();})}>取消扫描</button>}{!running&&<button disabled={busy} onClick={()=>void action(async()=>{const recovering=resumable(job);const id=await invoke<string>(recovering?'catalog_resume':'catalog_start',recovering?{id:job.id}:{root:job.root,library:job.library??'sound'});setTrackedId(id);setStatus('扫描已启动');await refresh();})}>{resumable(job)?'继续扫描':'重新扫描'}</button>}</div></article>):<p>尚无导入任务。</p>}</section>}
+  {showJobs&&(jobsDock.floating
+   ?<DockFrame dock={jobsDock} onChange={setJobsDock} className="import-jobs-dock" edge="bottom" dockedSize={320} snapLabel="松手吸附回右下">{()=>jobsPanel}</DockFrame>
+   :jobsPanel)}
   <dialog ref={dialog} onCancel={event=>{if(busy)event.preventDefault();else setOpen(false);}} onClose={()=>setOpen(false)} aria-labelledby="catalog-dialog-title"><div className="dialog-heading"><h2 id="catalog-dialog-title">添加至{pageNames[importLibrary]}</h2><button disabled={busy} aria-label="关闭添加素材" onClick={()=>setOpen(false)}>×</button></div><p>选择文件夹、填写原路径或将文件夹拖入窗口。音频仍保存在原位置。</p><label className="import-label">素材文件夹<input value={root} onChange={event=>{setRoot(event.target.value);setConfirmedRoot('');}} disabled={busy} placeholder="D:\声音素材"/></label><button className="choose-folder" disabled={busy||!native} onClick={()=>void action(async()=>{const chosen=await invoke<string|null>('catalog_pick_folder',{initial:root||history[0]||null});if(chosen)await validatePath(chosen);})}>选择文件夹…</button>{history.length>0&&<label className="import-label">最近使用<select aria-label="最近使用的素材路径" value="" disabled={busy} onChange={event=>{if(event.target.value){setRoot(displayPath(event.target.value));setConfirmedRoot('');}}}><option value="">选择记住的路径…</option>{history.map(path=><option key={path} value={path}>{displayPath(path)}</option>)}</select></label>}{confirmedRoot&&<div className="import-preview"><strong>目录可读取</strong><p className="job-path">{displayPath(confirmedRoot)}</p><p>将登记至{pageNames[importLibrary]}，不会复制源音频。</p></div>}{error&&<p className="asset-error">{error}</p>}<div className="dialog-actions"><button disabled={!root.trim()||busy} onClick={()=>void action(()=>validatePath(root))}>{busy?'处理中…':'检查目录'}</button><button className="primary" disabled={!confirmedRoot||busy||running} onClick={()=>void start()}>开始添加</button></div></dialog>
   {columnMenu&&<ColumnSettings x={columnMenu.x} y={columnMenu.y} layout={layout} library={library} onChange={setLayout} onClose={()=>setColumnMenu(null)}/>}
   {playlistMenu&&<PlaylistPicker x={playlistMenu.x} y={playlistMenu.y} ids={playlistMenu.ids} library={library} playlists={overview.playlists} onClose={()=>setPlaylistMenu(null)} onDone={()=>{treeStamp.current='';void refresh();}} notify={setStatus}/>}
   {groupMenu&&<FavoriteGroupPicker x={groupMenu.x} y={groupMenu.y} ids={groupMenu.ids} groups={overview.favorite_groups} onClose={()=>setGroupMenu(null)} onDone={()=>{treeStamp.current='';void refresh();}} notify={setStatus}/>}
-  {sidebarPanel&&<SidebarQuickPanel key={sidebarPanel.kind} panel={sidebarPanel} overview={overview} onClose={()=>setSidebarPanel(null)} onSelect={(kind,id)=>{setSidebarPanel(null);showCollection(kind==='tags'?'tag':'playlist',id);}}/>}
+  {sidebarPanel&&<SidebarQuickPanel key={sidebarPanel.kind} panel={sidebarPanel} overview={overview} onClose={()=>setSidebarPanel(null)} onSelect={(kind,id)=>{setSidebarPanel(null);if(kind==='favorites'){if(id==='__all__')showFavorites();else if(id==='__ungrouped__')selectFavoriteGroup(null,true);else selectFavoriteGroup(id,false);}else showCollection(kind==='tags'?'tag':'playlist',id);}}/>}
   <CatalogContext target={context} library={library} overview={overview} onClose={()=>setContext(null)} onChanged={contextChanged} notify={setStatus} onFavoriteGroup={(assets,x,y)=>setGroupMenu({x:x+14,y:y+14,ids:assets.map(asset=>asset.id)})} onLayer={(assets,scatter)=>{try{const result=addToLayer(assets,scatter);setStatus(`已添加 ${result.added} 个叠层片段，跳过 ${result.skipped} 个（需可用且时长已知）`);openTool('layer');}catch(e){setError(String(e));}}}/>
   <Settings open={settingsOpen} onClose={()=>setSettingsOpen(false)} value={preferences} onChange={setPreferences} onResetLayout={()=>setLayout(defaultLayout)} library={library} folder={folder} native={native} onOpenTool={tool=>{setSettingsOpen(false);openToolsPage(tool);}}/>
  </div>;
