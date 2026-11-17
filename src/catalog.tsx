@@ -296,16 +296,13 @@ function Catalog(){
         </div>
        </div>
        <nav className={`sidebar-shortcuts${shortcutsCompact?' is-compact':''}`} aria-label="素材导航">
-        <button className={!folder&&!favoritesOnly&&!tag&&!historyOnly&&!playlistId?'active':''} title={`全部素材 · ${totalAssets}条`} onClick={showAll}><NavGlyph id="all"/><span className="shortcut-label">全部素材</span></button>
         <button className={favoritesOnly?'active':''} aria-expanded={sidebarPanel?.kind==='favorites'} aria-haspopup="dialog" title="收藏分组" onClick={event=>openKind('favorites',event)}><NavGlyph id="favorites"/><span className="shortcut-label">收藏</span></button>
         <button className={historyOnly?'active':''} title={`试听历史 · ${overview.history_count}条`} onClick={showHistory}><NavGlyph id="history"/><span className="shortcut-label">历史</span></button>
-        {(['tags','playlists'] as ('tags'|'playlists')[]).map(kind=>{const label=({tags:'标签',playlists:'播放列表'})[kind];return <button key={kind} className={kind==='tags'&&tag||kind==='playlists'&&playlistId?'active':''} aria-expanded={sidebarPanel?.kind===kind} aria-haspopup="dialog" title={`${label} · ${kind==='tags'?overview.tags.length:overview.playlists.length}项`} onClick={event=>openKind(kind,event)}><NavGlyph id={kind}/><span className="shortcut-label">{label}</span></button>;})}
-        <button title={`任务 · ${jobs.length}项`} aria-expanded={jobsOpen} onClick={toggleJobs}><NavGlyph id="jobs"/><span className="shortcut-label">任务</span></button>
+        <button className={tag?'active':''} aria-expanded={sidebarPanel?.kind==='tags'} aria-haspopup="dialog" title={`标签 · ${overview.tags.length}项`} onClick={event=>openKind('tags',event)}><NavGlyph id="tags"/><span className="shortcut-label">标签</span></button>
        </nav>
-       <div className="sidebar-label tree-label">路径目录</div>
+       <div className="sidebar-label tree-label"><span>路径目录</span><button type="button" className="tree-all" title={`全部素材 · ${totalAssets}条`} onClick={showAll}>全部 {totalAssets}</button></div>
        <FolderTree nodes={folders} selected={folder} onContext={(path,event)=>setContext({x:event.clientX,y:event.clientY,folder:path})} onSelect={selectFolder}/>
        <div className={`sidebar-pins${pinsOpen?' is-open':''}`}><button className="pins-toggle" aria-expanded={pinsOpen} aria-controls="sidebar-pin-list" onClick={()=>setPinsOpen(value=>!value)} title={pinsOpen?'收起常用路径':'展开常用路径'}><span className="pins-toggle-label">常用路径</span><b>{overview.pins.length}</b><span className="pins-toggle-caret" aria-hidden="true">{pinsOpen?'⌄':'⌃'}</span></button>{pinsOpen&&<div className="pins-list" id="sidebar-pin-list" role="list">{overview.pins.map(item=>{const name=displayPath(item.path).split(/[\\/]/).filter(Boolean).at(-1)??item.path;return <div key={item.path} role="listitem" className={`pins-row${folder===item.path?' selected':''}`} onContextMenu={event=>{event.preventDefault();event.stopPropagation();setContext({x:event.clientX,y:event.clientY,folder:item.path});}}><span className="pin-dot" data-color={item.color??'none'} aria-hidden="true"/><button className="pins-select" title={displayPath(item.path)} aria-current={folder===item.path?'location':undefined} onClick={()=>{setSidebarPanel(null);selectFolder(item.path);}}>{name}</button></div>;})}{!overview.pins.length&&<p className="pins-empty">右击目录树中的文件夹，设为常用后可标颜色。</p>}</div>}</div>
-       <div className="side-dropzone" aria-hidden="true"><span>把文件夹或素材拖进窗口即可导入</span><em>也可点上方「添加音效」</em></div>
        {playerView.placement==='sidebar'&&<section className="sidebar-player" aria-label="波形预览">{playerPanel}</section>}
        <p className="sidebar-footnote">拖入文件夹添加 · 原路径引用</p>
       </aside>

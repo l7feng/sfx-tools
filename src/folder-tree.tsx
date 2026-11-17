@@ -2,7 +2,7 @@ import React,{useMemo,useState} from 'react';
 import type {FolderNode} from './catalog-client';
 import {displayPath} from './catalog-client';
 
-/** 文件夹图标：展开时画成开口文件夹，收起时用闭合轮廓，替代原来的 ▱ 字符。 */
+/** 目录图标：展开时画成开口文件夹，收起时用闭合轮廓。 */
 export function FolderGlyph({open}:{open:boolean}){
  return <svg className="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
   {open
@@ -10,6 +10,14 @@ export function FolderGlyph({open}:{open:boolean}){
    :<path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.4.6L11.4 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>}
  </svg>;
 }
+
+/** 文件图标：叶子目录直接挂素材，用「卷角文件 + 波形」表示，与文件夹区分。 */
+export function FileGlyph(){
+ return <svg className="folder-icon file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <path d="M6 3h7l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M13 3v5h5"/><path d="M8 15.5v1M10.4 13.5v5M12.8 14.5v3M15.2 15.2v1"/>
+ </svg>;
+}
+
 export function FolderTree({nodes,selected,onSelect,onContext}:{nodes:FolderNode[];selected:string|null;onSelect:(path:string)=>void;onContext?:(path:string,event:React.MouseEvent)=>void}){
  const [expanded,setExpanded]=useState(new Set<string>()),[collapsed,setCollapsed]=useState(new Set<string>());
  const {children,roots}=useMemo(()=>{
@@ -17,12 +25,18 @@ export function FolderTree({nodes,selected,onSelect,onContext}:{nodes:FolderNode
   for(const n of nodes){if(!n.parent||!known.has(n.parent))roots.push(n);else children.set(n.parent,[...(children.get(n.parent)??[]),n]);}
   return {children,roots};
  },[nodes]);
+ function toggle(path:string,open:boolean){
+  setExpanded(old=>{const next=new Set(old);open?next.delete(path):next.add(path);return next;});
+  setCollapsed(old=>{const next=new Set(old);open?next.add(path):next.delete(path);return next;});
+ }
  function render(node:FolderNode,depth:number):React.ReactNode{
   const nested=children.get(node.path)??[];const open=!collapsed.has(node.path)&&(depth<2||expanded.has(node.path));
-  return <li key={node.path}><div className={'folder-row '+(selected===node.path?'selected':'')} style={{paddingLeft:Math.min(depth,8)*12}} onContextMenu={event=>{if(onContext){event.preventDefault();event.stopPropagation();onContext(node.path,event);}}}>
-   <button className="folder-expand" disabled={!nested.length} aria-label={`${open?'折叠':'展开'} ${displayPath(node.path)}`} aria-expanded={nested.length?open:undefined} onClick={()=>{setExpanded(old=>{const n=new Set(old);if(!open)n.add(node.path);return n;});setCollapsed(old=>{const n=new Set(old);open?n.add(node.path):n.delete(node.path);return n;});}}>{nested.length?(open?'⌄':'›'):'·'}</button>
-   <button className="folder-select" title={displayPath(node.path)} aria-current={selected===node.path?'location':undefined} onClick={()=>onSelect(node.path)}><span className="folder-name"><FolderGlyph open={!!nested.length&&open}/><span className="folder-text">{node.name}</span></span><small>{node.count}</small></button>
-  </div>{open&&nested.length>0&&<ul>{nested.map(child=>render(child,depth+1))}</ul>}</li>;
+  const hasChild=!!nested.length;
+  return <li key={node.path}><button type="button" className={`folder-row${selected===node.path?' selected':''}${hasChild&&open?' is-open':''}`} style={{paddingLeft:Math.min(depth,8)*12}} aria-current={selected===node.path?'location':undefined} aria-expanded={hasChild?open:undefined} title={displayPath(node.path)} onContextMenu={event=>{if(onContext){event.preventDefault();event.stopPropagation();onContext(node.path,event);}}} onClick={()=>{if(hasChild)toggle(node.path,open);onSelect(node.path);}}>
+   {hasChild?<FolderGlyph open={open}/>:<FileGlyph/>}
+   <span className="folder-text">{node.name}</span>
+   <small>{node.count}</small>
+  </button>{open&&hasChild&&<ul>{nested.map(child=>render(child,depth+1))}</ul>}</li>;
  }
  return <nav className="folder-tree" aria-label="原路径文件树">{roots.length?<ul>{roots.map(n=>render(n,0))}</ul>:<p className="tree-empty">导入后按原始目录显示<br/>不会整理或移动文件</p>}</nav>;
 }
