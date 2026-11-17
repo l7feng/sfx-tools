@@ -18,8 +18,7 @@ export function FileGlyph(){
  </svg>;
 }
 
-/** 点击规则见 tree-click.ts（单击选中、再点标题收起）。 */
-export {treeClick} from './tree-click';
+import {treeClick} from './tree-click';
 
 export function FolderTree({nodes,selected,onSelect,onContext}:{nodes:FolderNode[];selected:string|null;onSelect:(path:string)=>void;onContext?:(path:string,event:React.MouseEvent)=>void}){
  const [expanded,setExpanded]=useState(new Set<string>()),[collapsed,setCollapsed]=useState(new Set<string>());
