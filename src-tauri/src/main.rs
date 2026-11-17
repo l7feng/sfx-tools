@@ -84,6 +84,7 @@ fn main() {
             drag_probe::catalog_drag_many,
             catalog::catalog_preview,
             catalog::catalog_list,
+            catalog::catalog_recent,
             catalog::catalog_get_items,
             catalog::catalog_assign_library,
             catalog::library_tools::library_overview,

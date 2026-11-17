@@ -727,6 +727,24 @@ pub async fn catalog_get_items(ids:Vec<String>,state:tauri::State<'_,CatalogStat
 }
 #[tauri::command]
 pub async fn catalog_list(state:tauri::State<'_,CatalogState>,offset:usize,limit:usize,folder:Option<String>,query:Option<String>,format:Option<String>,sort:Option<String>,favorites_only:Option<bool>,library:Option<String>,tag:Option<String>,tags:Option<Vec<String>>,history_only:Option<bool>,playlist_id:Option<String>,min_duration:Option<f64>,max_duration:Option<f64>,multilingual:Option<bool>,metadata:Option<bool>,favorite_group:Option<String>,favorite_ungrouped:Option<bool>,ready_only:Option<bool>)->Result<CatalogPage,String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||search_page(&db,offset,limit,SearchFilter{folder:folder.as_deref(),query:query.as_deref(),format:format.as_deref(),sort:sort.as_deref(),favorites_only:favorites_only.unwrap_or(false),favorite_group:favorite_group.as_deref(),favorite_ungrouped:favorite_ungrouped.unwrap_or(false),library:library.as_deref(),tag:tag.as_deref(),tags:tags.unwrap_or_default(),history_only:history_only.unwrap_or(false),playlist_id:playlist_id.as_deref(),min_duration,max_duration,multilingual:multilingual.unwrap_or(false),metadata:metadata.unwrap_or(false),ready_only:ready_only.unwrap_or(false)})).await.map_err(err)?}
+/// 侧栏「最近添加」用：按入库先后取最近 N 条素材。
+/// assets 的主键是 TEXT id，SQLite 隐藏自增列 rowid 因此天然等于「入库顺序」，
+/// 比 modified（文件修改时间，可能是十年前的老素材）更贴近「最近加进来的」。
+fn recent_items(db:&Path,limit:usize)->Result<Vec<CatalogItem>,String>{
+    let limit=limit.clamp(1,200);
+    let conn=connection(db)?;
+    let mut stmt=conn.prepare("SELECT a.id,a.path,a.name,a.format,a.size,a.modified,a.rate,a.channels,a.duration,a.status,a.error,COALESCE(u.favorite,0),COALESCE(u.tags,'[]'),COALESCE(u.favorite_group,'') FROM assets a LEFT JOIN user_metadata u ON a.id=u.asset_id ORDER BY a.rowid DESC LIMIT ?1").map_err(err)?;
+    let rows=stmt.query_map([limit as i64],|r|{
+        let tags:String=r.get(12)?;let tags=serde_json::from_str(&tags).map_err(|e|rusqlite::Error::FromSqlConversionFailure(12,rusqlite::types::Type::Text,Box::new(e)))?;
+        let group:String=r.get(13)?;
+        Ok(CatalogItem{id:r.get(0)?,path:r.get(1)?,name:r.get(2)?,format:r.get(3)?,size:r.get(4)?,modified:r.get(5)?,rate:r.get(6)?,channels:r.get(7)?,duration:r.get(8)?,status:r.get(9)?,error:r.get(10)?,favorite:r.get(11)?,favorite_group:if group.is_empty(){None}else{Some(group)},tags})
+    }).map_err(err)?;
+    let mut items=Vec::new();
+    for row in rows{items.push(row.map_err(err)?);}
+    Ok(items)
+}
+#[tauri::command]
+pub async fn catalog_recent(state:tauri::State<'_,CatalogState>,limit:usize)->Result<Vec<CatalogItem>,String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||recent_items(&db,limit)).await.map_err(err)?}
 #[tauri::command]
 pub async fn catalog_assign_library(ids:Vec<String>,library:String,state:tauri::State<'_,CatalogState>)->Result<u64,String>{let db=state.inner.db_path.clone();tauri::async_runtime::spawn_blocking(move||assign_library(&db,ids,&library)).await.map_err(err)?}
 #[tauri::command]
@@ -1335,5 +1353,34 @@ mod tests {
         let mut file=fs::OpenOptions::new().write(true).create_new(true).open(&output).expect("无法独占创建新报告");file.write_all(&serde_json::to_vec_pretty(&report).unwrap()).unwrap();file.sync_all().unwrap();
         eprintln!("真实库基准报告：{}；首扫 {:.3}s，复扫 {:.3}s，查询P95 {:.3}ms；源元数据不变 {}",output.display(),first_seconds,repeat_seconds,p95(&all_ms),source_unchanged);
         assert!(source_unchanged,"基准期间源目录有并发变化，报告不可作为稳定验收成绩");assert!(consistent,"查询结果出现不一致，见报告原始明细");
+    }
+}
+
+#[cfg(test)]
+mod recent_tests{
+    use super::*;
+    /// 侧栏「最近添加」的排序依据是入库顺序（rowid），不是文件修改时间；
+    /// 顺带验证 limit 会被钳到 1–200，不会被前端传 0 或超大值打穿。
+    #[test]fn recent_items_is_insert_order_and_clamps_limit(){
+        let dir=std::env::temp_dir().join(format!("sw-recent-{}",uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db=dir.join("catalog.sqlite");
+        let state=CatalogState::new(db.clone()).unwrap();
+        {
+            let conn=connection(&db).unwrap();
+            for i in 0..5{
+                conn.execute("INSERT INTO assets(id,path_key,path,name,format,size,modified,status) VALUES(?1,?2,?3,?4,'WAV',100,?5,'ready')",
+                    params![format!("id{i}"),format!("key{i}"),format!("C:/sounds/a{i}.wav"),format!("a{i}.wav"),"2020-01-01"]).unwrap();
+            }
+        }
+        let three=recent_items(&db,3).unwrap();
+        assert_eq!(three.len(),3);
+        assert_eq!(three[0].name,"a4.wav");
+        assert_eq!(three[1].name,"a3.wav");
+        assert_eq!(three[2].name,"a2.wav");
+        assert_eq!(recent_items(&db,0).unwrap().len(),1);
+        assert!(recent_items(&db,9999).unwrap().len()<=200);
+        drop(state);
+        let _=std::fs::remove_dir_all(&dir);
     }
 }

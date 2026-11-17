@@ -10,3 +10,10 @@ export function filterPage(items:CatalogAsset[],query:string,format:string){
  return items.filter(a=>(format==='全部格式'||a.format.toUpperCase()===format)&&words.every(w=>`${a.name} ${a.path}`.toLowerCase().includes(w)));
 }
 export function formatBytes(size:number){return size<1024?`${size} B`:size<1048576?`${(size/1024).toFixed(1)} KB`:`${(size/1048576).toFixed(1)} MB`;}
+/** 侧栏「最近添加」数据源：按入库先后取最近 N 条（后端 catalog_recent，limit 会被钳到 1–200）。
+ *  当前没有界面在调用它 —— 侧栏那块要不要填真实数据还没拍板，先留接口，接上去只差 10 行。 */
+export async function recentAssets(limit=8):Promise<CatalogAsset[]>{
+ const {invoke,isTauri}=await import('@tauri-apps/api/core');
+ if(!isTauri()) return [];
+ return invoke<CatalogAsset[]>('catalog_recent',{limit});
+}
