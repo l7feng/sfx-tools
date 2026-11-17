@@ -28,6 +28,7 @@ import {searchFolder,type SearchScope} from './search-scope';
 import {addToLayer} from './layer-tools';
 import {ToolsWindow} from './tools-window';
 import {AccountWindow} from './account-window';
+import {ErrorBoundary,installCrashHandlers} from './error-boundary';
 import {notify,NoticeStack} from './notices';
 import {TaskChip,TaskDrawer} from './task-center';
 import type {ToolPage} from './tool-navigation';
@@ -344,4 +345,5 @@ function Catalog(){
   <NoticeStack/>
  </div>;
 }
-createRoot(document.getElementById('root')!).render(<React.StrictMode><Catalog/></React.StrictMode>);
+installCrashHandlers();
+createRoot(document.getElementById('root')!).render(<React.StrictMode><ErrorBoundary><Catalog/></ErrorBoundary></React.StrictMode>);

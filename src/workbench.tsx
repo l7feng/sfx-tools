@@ -2,6 +2,7 @@ import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {assets,filterAssets,timeLabel} from './demo-data';
 import type {Asset} from './demo-data';
+import {ErrorBoundary,installCrashHandlers} from './error-boundary';
 import './theme.css';
 import './workbench.css';
 
@@ -82,4 +83,5 @@ function App(){
  <dialog ref={dialogRef} onCancel={()=>setDialog(null)} onClose={()=>setDialog(null)} aria-labelledby="dialog-title"><div className="dialog-heading"><h2 id="dialog-title">{dialog==='import'?'添加素材库':'工作台使用指南'}</h2><button aria-label="关闭对话框" onClick={()=>setDialog(null)}><Icon name="close"/></button></div>{dialog==='import'?<><p>预览“选择目录 → 检查内容 → 加入素材库”的流程。此样稿不会读取磁盘或导入文件。</p><label className="import-label">演示素材目录<select value={importChoice} onChange={e=>{setImportChoice(e.target.value);setPreview(false);}}><option value="">选择一个演示目录</option><option>演示目录 / 自然环境</option><option>演示目录 / 拟音动作</option></select></label>{preview&&<div className="import-preview"><strong>目录预览已准备</strong><p>{importChoice} · {importChoice.includes('自然')?4:2} 条现有演示素材</p><p>仅展示流程，不产生重复素材或真实磁盘写入。</p></div>}<div className="dialog-actions"><button disabled={!importChoice} onClick={()=>setPreview(true)}>预览内容</button><button className="primary" disabled={!preview} onClick={()=>{setScope(importChoice.includes('自然')?'自然环境':'拟音动作');setQuery('');setFormat('全部格式');report('演示完成 · 已展示所选分类，未导入真实文件');setDialog(null);}}>完成演示 <Icon name="arrow" size={16}/></button></div></>:<><p>按找声音的顺序组织：选择分类 → 搜索 → 查看详情 → 试听预览。</p><dl className="shortcuts"><div><dt>聚焦搜索</dt><dd>Ctrl K</dd></div><div><dt>列表中切换素材</dt><dd>↑ / ↓</dd></div><div><dt>非输入控件上模拟播放 / 暂停</dt><dd>Space</dd></div><div><dt>关闭弹窗</dt><dd>Esc</dd></div></dl><p>当前 12 条素材、波形和播放进度均为演示数据。收藏与筛选刷新后重置。真实导入、波形、播放和拖出将在后续阶段接入。</p><a href="?probe">打开 S1.0 原生验证窗口 →</a></>}</dialog>
  </div>;
 }
-createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
+installCrashHandlers();
+createRoot(document.getElementById('root')!).render(<React.StrictMode><ErrorBoundary><App/></ErrorBoundary></React.StrictMode>);

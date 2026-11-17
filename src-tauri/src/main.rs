@@ -23,6 +23,7 @@ mod workbench_jobs;
 mod bwf_metadata;
 mod multilingual;
 mod settings_ops;
+mod crash_log;
 mod plugins;
 use tauri::Manager;
 
@@ -76,6 +77,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             native_info,
             app_version,
+            crash_log::crash_log,
             audio_probe::test_tone,
             audio_probe::decode_sample,
             audio_probe::play_sample,
