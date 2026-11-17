@@ -18,14 +18,8 @@ export function FileGlyph(){
  </svg>;
 }
 
-/** 点击规则（2026-11-17 拍板）：「单击选中、再点标题收起」——
- * 点别的行＝选中它并展开；点已选中的行＝收起/展开它自己，选中保持不变。
- * 0.1.32 的「整行点击＝选中+展开+切换」会让连续浏览子目录时每点一次抖一下。 */
-export function treeClick(node:{hasChild:boolean;open:boolean;selected:boolean}):'select-open'|'toggle'|'select'{
- if(!node.hasChild) return 'select';
- if(node.selected) return 'toggle';
- return node.open?'select':'select-open';
-}
+/** 点击规则见 tree-click.ts（单击选中、再点标题收起）。 */
+export {treeClick} from './tree-click';
 
 export function FolderTree({nodes,selected,onSelect,onContext}:{nodes:FolderNode[];selected:string|null;onSelect:(path:string)=>void;onContext?:(path:string,event:React.MouseEvent)=>void}){
  const [expanded,setExpanded]=useState(new Set<string>()),[collapsed,setCollapsed]=useState(new Set<string>());
