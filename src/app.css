@@ -1,0 +1,41 @@
+/* 全局样式入口（2026-11-17 收口）：这里只做一件事——把层叠顺序固定下来，
+   组件自己的样式仍在组件目录内，但所有「布局类」样式一律从这里按序引入，
+   避免出现「谁先 import 谁赢」的隐式竞争。
+
+   顺序即优先级（后者覆盖前者）：
+     1 theme            变量与色板（只放 :root token，不放选择器）
+     2 workbench        排版基线：字族、字重、滚动条
+     3 catalog          列表与侧栏的基础骨架
+     4 workspace-layout 三栏栅格与固定尺寸
+     5 smart-tools      智能筛选条
+     6 workspace-shell  布局覆盖层（体积最大，负责把上面的基础值压紧）
+     7 context-menu     右键菜单
+     8 sidebar-dock     侧栏图标栏
+     9 empty-states     空状态
+    10 panel-dock       面板停靠
+    11 notices          右上通知栈
+    12 task-center      任务胶囊与抽屉
+
+   三条硬规则：
+   1) 根节点同一个 div 同时带 workspace-v2 与 catalog-shell，覆盖它下面的规则
+      必须写成 .workspace-v2.catalog-shell xxxx（复合）。
+      写成 .workspace-v2 .catalog-shell xxxx 是「后代」，永远匹配不到——
+      0.1.31 就因为这个写法让整段侧栏/波形规则全部失效（querySelectorAll 返回 0）。
+   2) 新增覆盖只允许追加在 workspace-shell.css 末尾，不许回头改前段数值；
+      要改基础值就改基础文件，并在提交信息里写明影响面。
+   3) 新类一律 ws- 前缀；改任何既有类之前，先 grep 该类在 src/*.css 的全部定义处
+      （.folder-row 曾有 15 处、--sidebar-width 曾有 3 处不同默认值）。
+*/
+
+@import './theme.css';
+@import './workbench.css';
+@import './catalog.css';
+@import './workspace-layout.css';
+@import './smart-tools.css';
+@import './workspace-shell.css';
+@import './context-menu.css';
+@import './sidebar-dock.css';
+@import './empty-states.css';
+@import './panel-dock.css';
+@import './notices.css';
+@import './task-center.css';

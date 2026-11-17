@@ -69,8 +69,8 @@
 .workspace-v2 .asset-name strong{font-size:13px;line-height:1.5}
 .workspace-v2 .asset-name small{font-size:11px;line-height:1.45}
 .workspace-v2 .nav-item{min-height:35px;font-size:12px}
-.workspace-v2 .folder-row{min-height:34px}
-.workspace-v2 .folder-select{font-size:12px}
+/* 2026-11-17 清理：以下两行已失效删除——`.folder-row` 34px 被文末 24px 段完全覆盖；
+   `.folder-select` 对应的 DOM 在目录树重写（整行即按钮）时已不存在。 */
 .workspace-v2 .pins-select{min-height:26px;font-size:12px}
 .workspace-v2 .statusbar{height:28px;min-height:28px}
 .workspace-v2 .statusbar button{min-height:24px}
