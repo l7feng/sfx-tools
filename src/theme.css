@@ -1,6 +1,6 @@
-/* 主题令牌：4 套强调色 × 明暗两种底色，共 8 种组合。
-   界面样式只引用这里的变量，不再写死颜色；强调色的浅底、描边、波形色阶都由 color-mix 派生，
-   换色时不必逐条改色。默认（无 data 属性）为暗色 + 冷蓝。 */
+/* 主题令牌：单一强调色（冷蓝）× 明暗两种底色，共 2 种组合（2026-11-14 删去青绿、紫罗兰，
+   同日按人类要求弃用浅橘，只保留冷蓝）。
+   界面样式只引用这里的变量，不再写死颜色；强调色的浅底、描边、波形色阶都由 color-mix 派生。 */
 :root{
  color-scheme:dark;
  --bg:#151719;--panel:#1b1d20;--raised:#222529;--raised-2:#1c2128;
@@ -32,11 +32,5 @@
  --danger:#b3352a;--danger-line:#c8503f;--warning:#8a6410;--success:#1f7a63;
  --scrim:#14161959;--shadow-lg:0 24px 60px #00000026;
 }
-[data-accent=gold]{--accent:#e6b675}
 [data-accent=blue]{--accent:#6aa9e0}
-[data-accent=teal]{--accent:#58c4a3}
-[data-accent=violet]{--accent:#a98bd8}
-[data-theme=light][data-accent=gold]{--accent:#a8762a}
 [data-theme=light][data-accent=blue]{--accent:#2f6ea8}
-[data-theme=light][data-accent=teal]{--accent:#1c7a60}
-[data-theme=light][data-accent=violet]{--accent:#6b4fa0}

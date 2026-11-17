@@ -24,6 +24,10 @@ const PATHS:Record<ToolPage,React.ReactNode>={
   maintenance:<><path d="M3.4 12.4h3.8l2.3-4.6 3.1 8.2 2.4-3.6h5.6"/></>,
   // 音频信息：信息圈
   info:<><circle cx="12" cy="12" r="8.3"/><path d="M12 11.2v5.4"/><circle cx="12" cy="8.1" r=".95" fill="currentColor" stroke="none"/></>,
+  // UCS 批量命名：清单 + 改写笔
+  'ucs-namer':<><path d="M4 5.6h8.4"/><path d="M4 12h5.6"/><path d="M4 18.4h4.2"/><path d="m15.4 8.4 3.2 3.2-5 5-3.7.5.5-3.7z"/></>,
+  // MUS Prompt：对话气泡
+  'mus-prompt':<><path d="M4.2 5.6h15.6v9.6H9.8L5.4 19.4v-4.2H4.2z"/><path d="M8 9.4h8"/><path d="M8 12.4h5"/></>,
 };
 
 export function ToolGlyph({id}:{id:ToolPage}){

@@ -114,6 +114,8 @@ fn main() {
             catalog::catalog_merge_assets,
             desktop::catalog_reveal,
             desktop::catalog_copy_paths,
+            desktop::open_external,
+            desktop::reveal_folder,
             protools::protools_status,
             protools::protools_import_preview,
             semantic::semantic_status,

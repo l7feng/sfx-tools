@@ -100,6 +100,35 @@ pub async fn catalog_copy_paths(window:tauri::Window,catalog:tauri::State<'_,cra
     Ok(paths.len())
 }
 
+/// 打开外链工具：只放行 http/https，交给系统默认浏览器，不在应用内嵌网页。
+/// 用 ShellExecuteW 而不是 cmd /c start，避免 URL 里的 & 被命令行二次解释。
+#[tauri::command]
+pub fn open_external(url:String)->Result<(),String>{
+    let value=url.trim();
+    if value.len()>2048{return Err("链接过长。".into());}
+    if value.chars().any(|c|c.is_control()||c=='"'){return Err("链接包含非法字符。".into());}
+    let scheme=value.split_once("://").map(|parts|parts.0.to_ascii_lowercase()).unwrap_or_default();
+    if scheme!="http"&&scheme!="https"{return Err("只允许打开 http/https 链接。".into());}
+    #[cfg(windows)] unsafe{
+        use windows::{core::HSTRING,Win32::UI::Shell::ShellExecuteW,Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL};
+        let result=ShellExecuteW(None,&HSTRING::from("open"),&HSTRING::from(value),None,None,SW_SHOWNORMAL);
+        if result.0 as isize<=32{return Err("系统未能打开该链接，请检查默认浏览器设置。".into());}
+        return Ok(());
+    }
+    #[cfg(not(windows))]{let _=value;Err("外链打开目前仅支持 Windows。".into())}
+}
+
+/// 打开素材文件夹（任务抽屉里的「打开目录」）：路径必须存在且为目录。
+#[tauri::command]
+pub fn reveal_folder(path:String)->Result<(),String>{
+    let target=PathBuf::from(path.trim());
+    if !target.is_absolute(){return Err("请提供绝对路径。".into());}
+    if !target.is_dir(){return Err("目录不存在或不可访问。".into());}
+    std::process::Command::new("explorer.exe").arg(visible_path(&target))
+        .spawn().map_err(|e|format!("无法打开目录：{e}"))?;
+    Ok(())
+}
+
 #[cfg(test)] mod tests{
  use super::*;
  #[test] fn startup_lock_releases_and_does_not_truncate(){

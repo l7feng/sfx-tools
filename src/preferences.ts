@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react';
 import {defaultMusicFilterTemplates,safeMusicFilterTemplates,type MusicFilterTemplates} from './music-filter-defaults.ts';
-export type WorkspacePage='sound'|'music'|'tools';
+export type WorkspacePage='sound'|'music';
 export type Preferences={
  startPage:WorkspacePage;
  volume:number;
@@ -37,7 +37,8 @@ export function safePreferences(raw:unknown):Preferences{
  const on=(key:keyof Preferences)=>value[key]!==false;
  const off=(key:keyof Preferences)=>value[key]===true;
  return {
-  startPage:['sound','music','tools'].includes(value.startPage??'')?value.startPage!: 'sound',
+  // 0.1.30 起「音频工具」不再是顶级页面：旧存档里的 'tools' 一律回落到音效库。
+  startPage:value.startPage==='music'?'music':'sound',
   volume:typeof value.volume==='number'&&Number.isFinite(value.volume)?Math.max(0,Math.min(100,value.volume)):15,
   waveColor:value.waveColor==='white'?'white':'blue',
   rememberLayout:on('rememberLayout'),

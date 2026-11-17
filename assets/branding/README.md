@@ -1,6 +1,6 @@
 # SFX TOOLS 图标
 
-2026-11-09（0.1.25）按人类裁决改为「蓝色声波柱」并全端统一：深色圆角方块 + 五根蓝色渐变声波柱。同一几何同时用于 `src/brand-mark.tsx`（顶部 SVG）、`src-tauri/icons/icon.png`、`icon.ico`（EXE 与快捷方式）与本目录母版 `sound-workbench-master.png`。图标由脚本按 SVG 几何程序化渲染（Pillow，1024px，ICO 含 16–256px），不再依赖 AI 出图，保证小尺寸与头部标志完全一致。
+2026-11-09（0.1.25）按人类裁决改为「蓝色声波柱」并全端统一：深色圆角方块 + 五根蓝色渐变声波柱。同一几何同时用于 `src/brand-mark.tsx`（顶部 SVG）、`assets/icons/app.png`、`assets/icons/app.ico`（EXE、窗口与快捷方式同一枚母版）。图标由脚本按 SVG 几何程序化渲染（Pillow，1024px，ICO 含 16–256px），不再依赖 AI 出图，保证小尺寸与头部标志完全一致。
 
 历史：2026-10-28 首版为暖金声波（imagegen 生成），母版提示词存档如下，仅追溯用，已被蓝色版取代。
 

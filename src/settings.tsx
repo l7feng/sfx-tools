@@ -38,7 +38,7 @@ export function Settings({open,onClose,value,onChange,onResetLayout,onOpenTool,l
    <section>
     {tab==='display'&&<>
      <h3>显示与布局</h3>
-     <div className="theme-setting"><span className="theme-setting-label">强调色</span><div className="theme-swatches" role="group" aria-label="强调色">{THEME_ACCENTS.map(item=><button key={item.value} type="button" className="theme-swatch" data-accent={item.value} aria-pressed={theme.accent===item.value} aria-label={item.label} title={item.label} onClick={()=>theme.setAccent(item.value)}/>)}</div><span className="theme-setting-value">{THEME_ACCENTS.find(item=>item.value===theme.accent)?.label}</span></div>
+     <div className="theme-setting"><span className="theme-setting-label">强调色</span>{THEME_ACCENTS.length>1?<div className="theme-swatches" role="group" aria-label="强调色">{THEME_ACCENTS.map(item=><button key={item.value} type="button" className="theme-swatch" data-accent={item.value} aria-pressed={theme.accent===item.value} aria-label={item.label} title={item.label} onClick={()=>theme.setAccent(item.value)}/>)}</div>:<span className="theme-swatch-static" data-accent={theme.accent} aria-hidden="true"/>}<span className="theme-setting-value">{THEME_ACCENTS.find(item=>item.value===theme.accent)?.label??THEME_ACCENTS[0].label}</span></div>
      <label>底色<select value={theme.mode} onChange={event=>theme.setMode(event.target.value==='light'?'light':'dark')}><option value="dark">深色</option><option value="light">浅色</option></select></label>
      <label>波形配色<select value={value.waveColor} onChange={event=>set('waveColor',event.target.value as Preferences['waveColor'])}><option value="blue">蓝色</option><option value="white">白色</option></select></label>
      {check('rememberLayout','记住面板折叠、比例和列宽','把工作区布局写入本机设置')}
@@ -59,7 +59,7 @@ export function Settings({open,onClose,value,onChange,onResetLayout,onOpenTool,l
     </>}
     {tab==='library'&&<>
      <h3>素材库</h3>
-     <label>启动页面<select value={value.startPage} onChange={event=>set('startPage',event.target.value as Preferences['startPage'])}><option value="sound">音效库</option><option value="music">音乐库</option><option value="tools">音频工具</option></select></label>
+     <label>启动页面<select value={value.startPage} onChange={event=>set('startPage',event.target.value as Preferences['startPage'])}><option value="sound">音效库</option><option value="music">音乐库</option></select></label>
      {check('multilingualSearch','跨语言搜索（中 / 英 / 日）','输一种语言，同时搜中/英/日同义词；公式、格式、分类、标签、时长、收藏与播放列表筛选都不受影响')}
      {check('metadataSearch','检索时包含内嵌元数据','默认开启；与搜索栏的「含元数据」按钮联动，任一处改动都会保存。关闭后只搜文件名。仅 WAV/BWF 的 bext 与 iXML 字段参与匹配，MP3、FLAC、AIFF、M4A 没有这些内嵌字段')}
      <p>本地静态词表，离线、不联网。词与词之间仍是「同时满足」，未登录词按字面匹配。</p>

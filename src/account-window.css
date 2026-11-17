@@ -1,0 +1,113 @@
+/* 账号窗口：1000×806，左栏 398px 登录、右栏绑定与设备。 */
+.account-window{width:min(1000px,92vw);height:min(806px,88vh);max-width:none;max-height:none;padding:0;overflow:hidden;background:#1a1e22;border:1px solid var(--line-strong);border-radius:10px}
+.account-window[open]{display:flex;flex-direction:column}
+[data-theme=light] .account-window{background:var(--panel)}
+.account-head{height:50px;flex-shrink:0;display:flex;align-items:center;gap:11px;padding:0 16px;border-bottom:1px solid var(--line);background:#1e2227}
+[data-theme=light] .account-head{background:var(--raised)}
+.account-head h2{font-size:16px;font-weight:600}
+.account-sub{font:10px var(--mono);color:var(--muted);border-left:1px solid var(--line);padding-left:11px}
+.account-head-sp{flex:1}
+.account-pills{display:flex;gap:5px;flex-wrap:wrap}
+.account-pill{font:9px var(--mono);border:1px solid var(--line);border-radius:3px;padding:2px 5px;color:var(--muted);display:inline-flex;align-items:center;gap:4px}
+.account-pill.on{color:var(--success);border-color:color-mix(in srgb,var(--success) 40%,transparent)}
+.account-close{width:26px;height:26px;min-width:26px;min-height:26px;padding:0;border:1px solid var(--line);border-radius:4px;color:var(--muted);font-size:11px}
+.account-close:hover{color:var(--text);border-color:var(--line-strong)}
+.account-body{flex:1;min-height:0;display:flex}
+.account-left{width:398px;flex:0 0 398px;display:flex;flex-direction:column;gap:9px;padding:16px 18px;overflow:auto;background:#191d21;border-right:1px solid var(--line)}
+[data-theme=light] .account-left{background:var(--bg)}
+.account-left h3{font-size:13px;font-weight:600;margin:0}
+.account-lead{margin:0;font-size:10.5px;line-height:1.7;color:var(--muted)}
+.workspace-manager .account-oauth,.account-oauth{width:100%;height:42px;min-height:42px;display:flex;align-items:center;gap:10px;padding:0 12px;border:1px solid var(--line-strong);border-radius:6px;background:#23282e;color:var(--text);font-size:12px;justify-content:flex-start}
+[data-theme=light] .account-oauth{background:var(--raised-2)}
+.account-oauth:hover{background:var(--raised-hover)}
+.account-oauth.is-active{border-color:var(--accent-line,color-mix(in srgb,var(--accent) 45%,transparent));background:var(--accent-wash)}
+.account-lg{width:22px;height:22px;flex:0 0 22px;display:grid;place-items:center;border:1px solid var(--line-strong);border-radius:50%;font:600 10px/1 var(--mono);color:var(--text)}
+.account-oauth b{font-weight:500;font-size:12px}
+.account-oauth-r{margin-left:auto;font:9px var(--mono);color:var(--muted)}
+.account-oauth.is-active b{color:var(--accent)}
+.account-oauth-note{margin:0;padding:8px 9px;border:1px dashed var(--line-strong);border-radius:6px;font-size:9.5px;line-height:1.75;color:var(--muted);background:#101417}
+[data-theme=light] .account-oauth-note{background:var(--raised)}
+.account-oauth-note b{display:block;color:var(--text);font-weight:500;margin-bottom:2px}
+.account-orline{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:9.5px}
+.account-orline span{flex:1;height:1px;background:var(--line-subtle)}
+.account-orline em{font-style:normal}
+.account-logged{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--line);border-radius:5px;font-size:10.5px}
+.account-logged span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-logged button{height:22px;min-height:22px;padding:0 8px;border:1px solid var(--line);border-radius:3px;font-size:10px;color:var(--muted)}
+.account-note{margin:auto 0 0;padding-top:8px;border-top:1px solid var(--line-subtle);font-size:9.5px;line-height:1.75;color:var(--muted)}
+.account-note b{color:var(--text);font-weight:500}
+/* 右侧 */
+.account-right{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px;padding:16px 18px;overflow:auto}
+.account-steps{display:flex;align-items:center;flex-shrink:0}
+.account-step{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted)}
+.account-step .account-step-b{width:16px;height:16px;display:grid;place-items:center;border:1px solid var(--line-strong);border-radius:50%;font:9px var(--mono);color:var(--muted)}
+.account-step.done{color:var(--success)}
+.account-step.done .account-step-b{color:var(--success);border-color:color-mix(in srgb,var(--success) 50%,transparent);background:color-mix(in srgb,var(--success) 10%,transparent)}
+.account-step.now{color:var(--accent)}
+.account-step.now .account-step-b{color:var(--accent);border-color:var(--accent-line-strong,color-mix(in srgb,var(--accent) 55%,transparent));background:var(--accent-wash)}
+.account-step-ln{width:26px;height:1px;background:var(--line);margin:0 7px}
+.account-card{display:flex;flex-direction:column;gap:9px;padding:11px 12px;border:1px solid var(--line);border-radius:7px;background:#1e2328}
+[data-theme=light] .account-card{background:var(--raised-2)}
+.account-card-head{display:flex;align-items:center;gap:8px}
+.account-card-head b{font-size:11.5px;font-weight:600}
+.account-tag{margin-left:auto;font:9px var(--mono);border:1px solid color-mix(in srgb,var(--warning) 40%,transparent);border-radius:3px;padding:1px 5px;color:var(--warning);background:color-mix(in srgb,var(--warning) 8%,transparent)}
+.account-tag.is-dim{margin-left:0;border-color:var(--line);color:var(--muted);background:none}
+.account-phone{display:flex;gap:8px}
+.account-cc{position:relative;width:86px;height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 9px;border:1px solid var(--line);border-radius:5px;background:var(--raised);font:11px var(--mono);color:var(--text)}
+.account-cc span{color:var(--line-strong);font-size:9px}
+.account-cc select{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;min-height:0}
+.account-pin{flex:1;min-width:0}
+.account-pin input{width:100%;height:36px;min-height:36px;padding:0 9px;border:1px solid var(--line);border-radius:5px;background:var(--raised);font:11px var(--mono);letter-spacing:1px}
+.account-code{display:flex;gap:8px}
+.account-code-input{flex:1;min-width:0}
+.account-code-input input{width:100%;height:36px;min-height:36px;padding:0 9px;border:1px solid var(--line);border-radius:5px;background:var(--raised);font:13px var(--mono);letter-spacing:4px}
+.account-send{height:36px;min-height:36px;padding:0 11px;border:1px solid var(--line);border-radius:5px;font:10px var(--mono);color:var(--muted);white-space:nowrap;flex:0 0 auto}
+.account-actions{display:flex;gap:7px}
+.account-actions button{height:34px;min-height:34px;flex:1;border:1px solid var(--line);border-radius:5px;font-size:11.5px;color:var(--text)}
+.account-actions button:disabled{opacity:1;cursor:not-allowed;color:var(--muted);background:#262b31;border-color:var(--line)}
+.account-actions .primary:disabled{background:#262b31!important;border-color:var(--line)!important;color:#8b9096!important}
+.account-send:disabled{opacity:.5}
+.account-actions .primary:not(:disabled){background:color-mix(in srgb,var(--accent) 16%,transparent);border-color:var(--accent-line-strong,color-mix(in srgb,var(--accent) 50%,transparent));color:var(--accent)}
+.account-skip{flex:0 0 108px!important}
+.account-gate{display:flex;align-items:flex-start;gap:8px;margin:0;padding:8px 10px;border:1px solid color-mix(in srgb,var(--warning) 30%,transparent);border-radius:6px;background:color-mix(in srgb,var(--warning) 6%,transparent);font-size:9.5px;line-height:1.7;color:var(--muted)}
+.account-gate b{color:var(--warning);font-weight:500;white-space:nowrap}
+.account-reasons{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
+.account-reasons li{position:relative;padding-left:11px;font-size:10px;line-height:1.7;color:var(--muted)}
+.account-reasons li::before{content:'·';position:absolute;left:2px;color:var(--accent)}
+.account-stats{display:flex;gap:8px}
+.account-stat{flex:1;min-width:0;padding:8px 9px;border:1px solid var(--line);border-radius:6px;background:#1b2025}
+[data-theme=light] .account-stat{background:var(--raised)}
+.account-stat span{display:block;font-size:9px;color:var(--muted)}
+.account-stat b{display:block;margin-top:3px;font:11px var(--mono);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.account-stat b small{font:9px var(--mono);color:var(--muted)}
+.account-stat b.is-warn{color:var(--warning)}
+.account-stat b.is-on{color:var(--success)}
+.account-bound{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid color-mix(in srgb,var(--success) 32%,transparent);border-radius:6px;background:color-mix(in srgb,var(--success) 7%,transparent);font-size:10.5px}
+.account-bound-ic{width:16px;height:16px;display:grid;place-items:center;border-radius:50%;background:color-mix(in srgb,var(--success) 20%,transparent);color:var(--success);font-size:9px}
+.account-bound-sp{flex:1}
+.account-bound button{height:22px;min-height:22px;padding:0 8px;border:1px solid var(--line);border-radius:3px;font-size:9.5px;color:var(--muted)}
+.account-devices-card{flex:1 1 auto;min-height:0}
+.account-dev{display:flex;flex-direction:column;gap:5px;min-height:0;overflow:auto}
+.account-drow{display:flex;align-items:center;gap:9px;padding:7px 9px;border:1px solid var(--line-subtle);border-radius:5px;background:#1b2025}
+[data-theme=light] .account-drow{background:var(--raised)}
+.account-di{width:16px;height:16px;flex:0 0 16px;display:grid;place-items:center;color:var(--accent);font-size:10px}
+.account-dm{flex:1;min-width:0}
+.account-dm b{display:block;font-size:10.5px;font-weight:500}
+.account-dm span{display:block;margin-top:1px;font:9px var(--mono);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-da{font:9px var(--mono);color:var(--success);border:1px solid color-mix(in srgb,var(--success) 35%,transparent);border-radius:3px;padding:1px 5px;flex:0 0 auto}
+.account-da.off{color:var(--muted);border-color:var(--line)}
+.account-device-actions{margin-top:auto}
+.account-device-actions button{font-size:11px}
+.account-devpanel{margin-top:6px}
+.account-error{margin:0;font-size:10.5px;color:var(--danger);line-height:1.7;overflow-wrap:anywhere}
+.account-message{margin:0;font-size:10.5px;color:var(--accent);line-height:1.7}
+.account-foot{height:36px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 16px;border-top:1px solid var(--line);font-size:9.5px;color:var(--muted)}
+.account-foot-link{height:24px;min-height:24px;padding:0;border:0;background:transparent;color:var(--accent);font-size:9.5px}
+.account-foot-link:hover{background:transparent;text-decoration:underline}
+.account-foot-sp{flex:1}
+.account-foot-sep{width:1px;height:12px;background:var(--line)}
+@media(max-width:1000px){
+ .account-left{width:330px;flex-basis:330px;padding:14px}
+ .account-stats{flex-wrap:wrap}
+ .account-stat{flex:1 1 44%}
+}

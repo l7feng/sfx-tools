@@ -14,8 +14,16 @@
 .catalog-shell .asset-name{min-width:0}
 .asset-actions{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:0 20px 8px;font-size:12px;color:var(--muted)}
 .asset-actions>span{margin-right:auto}.asset-actions button{font-size:12px;padding:0 8px;border:1px solid var(--line)}
-.relocate-panel{padding:12px 20px;background:var(--raised);font-size:12px;max-height:240px;overflow:auto;border-block:1px solid var(--line)}
-.relocate-panel label{display:block;margin-top:8px}.relocate-panel input{width:100%;margin-top:6px}.relocate-panel small{display:block;overflow-wrap:anywhere}
+.relocate-backdrop{position:fixed;inset:0;z-index:95;background:transparent}
+.relocate-panel{position:fixed;z-index:96;width:min(360px,calc(100vw - 12px));max-height:min(64vh,400px);overflow:auto;overscroll-behavior:contain;padding:12px;background:var(--raised-2);border:1px solid var(--line-strong);border-radius:6px;box-shadow:0 15px 48px #0009;font-size:12px}
+.relocate-panel header{display:flex;align-items:center;justify-content:space-between;padding:0 0 6px;border-bottom:1px solid var(--overlay);margin-bottom:6px}
+.relocate-panel header strong{font-size:13px;font-weight:500}
+.relocate-panel header button{margin-left:auto}
+.relocate-panel p{color:var(--muted);font-size:11px;line-height:1.7;margin:4px 0 8px}
+.relocate-panel label{display:block;margin-top:8px}.relocate-panel input{width:100%;margin-top:6px;min-height:28px}.relocate-panel small{display:block;overflow-wrap:anywhere}
+/* 浮层挂在 body 上，不再继承 .workspace-v2 的按钮尺寸，这里自行给定。 */
+.relocate-panel button{min-height:26px;height:26px;min-width:26px;padding:0 9px;font-size:12px;border:1px solid var(--line);border-radius:4px}
+.relocate-panel header button{height:24px;min-height:24px;padding:0 4px;border-color:transparent}
 .catalog-shell .filterbar{flex-wrap:wrap}.catalog-shell .rate-col{display:table-cell}
 .catalog-shell .statusbar>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:1000px){.catalog-shell .inspector{width:min(var(--inspector-width),28vw)}}
