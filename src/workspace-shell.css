@@ -179,3 +179,38 @@
 .workspace-v2 .selection-tools::-webkit-scrollbar{height:5px}
 .workspace-v2 .selection-tools::-webkit-scrollbar-track{background:transparent}
 .workspace-v2 .selection-tools::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:3px}
+
+/* 2026-11-17 布局压缩：底部播放器与左侧栏去掉冗余，列表可视区多出约 150px。
+   逻辑：纵向按内容占位（树的空白交给拖放区）、横向一行只放一类控件、低频控件按条件出现。
+   注意：根节点同时带 workspace-v2 与 catalog-shell 两个类，选择器必须写成复合 .workspace-v2.catalog-shell，
+   写成后代形式 .workspace-v2 .catalog-shell 永远匹配不到。 */
+.workspace-v2.catalog-shell .real-wave-area{height:min(var(--wave-height,96px),96px,26vh)}
+.workspace-v2 .wave-view-controls.wave-overlay{position:absolute;top:4px;right:6px;z-index:6;display:flex;align-items:center;gap:6px;padding:2px 7px;border:1px solid var(--line);border-radius:4px;background:color-mix(in srgb,var(--panel) 86%,transparent);font-size:10px;color:var(--muted)}
+.workspace-v2 .wave-overlay label{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.workspace-v2 .wave-overlay select{min-height:20px;height:20px;font-size:10px;padding:0 2px;background:transparent;border-color:var(--line)}
+.workspace-v2 .wave-overlay button{min-height:20px;height:20px;font-size:10px;padding:0 6px;border:1px solid var(--line)}
+.workspace-v2 .transport{gap:9px;align-items:center;padding-top:5px}
+.workspace-v2 .transport-buttons{gap:5px;flex:0 0 auto}
+.workspace-v2 .transport .full-seek.seek-inline{flex:1 1 auto;min-width:90px;gap:0;margin:0}
+.workspace-v2 .seek-inline input{flex:1 1 auto;min-width:60px;min-height:22px;height:22px;padding:0}
+.workspace-v2 .transport .volume{flex:0 0 auto;gap:6px}
+.workspace-v2 .transport .volume input{width:62px;min-height:20px;height:20px}
+.workspace-v2 .transport .speed-control{border-left:1px solid var(--line);padding-left:8px}
+.workspace-v2 .transport .speed-control input{width:56px}
+.workspace-v2 .player-speed-note{font-size:10px;color:var(--accent);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.workspace-v2 .player-footnote{font-size:10px;margin-top:2px}
+.workspace-v2 .real-player{padding:4px 14px 3px}
+/* 侧栏：树按内容占位（8 个顶层目录≈192px），行高 34→24，剩余高度交给底部拖放区 */
+.workspace-v2.catalog-shell .sidebar .folder-tree{flex:0 1 auto;min-height:120px;margin:0;overflow:auto;overscroll-behavior:contain}
+.workspace-v2.catalog-shell .sidebar .folder-row{min-height:24px}
+.workspace-v2.catalog-shell .sidebar .folder-select{min-height:22px;font-size:11.5px;padding:0 4px}
+.workspace-v2.catalog-shell .sidebar .folder-expand{min-width:22px;min-height:22px;font-size:10px}
+.workspace-v2.catalog-shell .sidebar .folder-icon{width:12px;height:12px;flex:0 0 12px}
+.workspace-v2.catalog-shell .sidebar .tree-label{margin-top:4px;margin-bottom:2px}
+.workspace-v2.catalog-shell .sidebar .pins-toggle{height:22px;min-height:22px;font-size:11px}
+.workspace-v2.catalog-shell .sidebar-pins{min-width:0;margin-top:4px;padding-top:2px}
+.workspace-v2.catalog-shell .side-dropzone{flex:1 1 auto;min-height:88px;margin:8px 2px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px;border:1px dashed var(--line);border-radius:5px;color:var(--muted);font-size:10.5px;line-height:1.55;text-align:center}
+.workspace-v2.catalog-shell .side-dropzone span{opacity:.9}
+.workspace-v2.catalog-shell .side-dropzone em{font-style:normal;font-size:9.5px;opacity:.6}
+.workspace-v2 .statusbar{height:26px;gap:14px;font-size:10px}
+.workspace-v2 .status-hint{color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
