@@ -21,6 +21,8 @@ export type Preferences={
  pluginPtBouncer:boolean;
  /** 'default' 或输出设备名；设备拔掉后后端自动回落系统默认。 */
  outputDevice:string;
+ /** 目录树行高：紧凑 24px（默认，信息密度优先）/ 标准 28px（高分屏更松快）。只影响左侧目录树，不动列表行高。 */
+ treeDensity:'compact'|'standard';
  /** 音乐库筛选各维度的预置值；设置页可编辑，空数组表示该维度不显示预置。 */
  filterTemplates:MusicFilterTemplates;
 };
@@ -28,6 +30,7 @@ export const defaultPreferences:Preferences={
  startPage:'sound',volume:15,waveColor:'blue',rememberLayout:true,
  multilingualSearch:true,metadataSearch:true,simpleWaveform:true,
  auditionOnSelect:false,replaySameFromStart:true,stopOnDragToDaw:true,outputDevice:'default',
+ treeDensity:'compact',
  pluginAafImport:false,pluginPtOverlay:false,pluginPtBouncer:false,
  filterTemplates:defaultMusicFilterTemplates()
 };
@@ -52,6 +55,7 @@ export function safePreferences(raw:unknown):Preferences{
   pluginPtOverlay:off('pluginPtOverlay'),
   pluginPtBouncer:off('pluginPtBouncer'),
   outputDevice:typeof value.outputDevice==='string'&&value.outputDevice.trim()?value.outputDevice:'default',
+  treeDensity:value.treeDensity==='standard'?'standard':'compact',
   filterTemplates:safeMusicFilterTemplates(value.filterTemplates)
  };
 }

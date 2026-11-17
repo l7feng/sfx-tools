@@ -264,7 +264,8 @@ function Catalog(){
  const playerPanel=<NativePlayer selected={selected} collapsed={playerView.placement==='bottom'&&layout.bottomCollapsed} onToggle={playerView.placement==='bottom'?()=>toggle('bottomCollapsed'):undefined} defaultVolume={preferences.volume} placement={playerView.placement} onPlacementChange={changePlayerPlacement}/>;
  const playerSnapSize=Math.max(120,layout.wave+90);
  // 导入任务改为状态栏胶囊 + 抽屉（task-center.tsx），不再有常驻浮窗。
- return <div className={`app-shell catalog-shell workspace-v2 wave-${preferences.waveColor}`} style={style}>
+ // 目录树行高由偏好决定（紧凑 24 / 标准 28），用 CSS 变量注入根节点，避免改 CSS 默认值影响旧存档。
+ return <div className={`app-shell catalog-shell workspace-v2 wave-${preferences.waveColor}`} style={{...style,'--tree-row':preferences.treeDensity==='standard'?'28px':'24px'} as React.CSSProperties}>
   {dragging&&<div className="folder-drop-overlay"><strong>松开以检查素材文件夹</strong><span>添加至{pageNames[library]} · 确认后才导入</span></div>}
   <header className={`workspace-header ${layout.topCollapsed?'is-collapsed':''}`}>
    <div className="workspace-navigation"><div className="compact-brand"><BrandMark/></div><nav aria-label="工作台页面">{(['sound','music'] as WorkspacePage[]).map(item=><button key={item} aria-current={workspacePage===item?'page':undefined} onClick={()=>switchPage(item)}>{pageNames[item]}</button>)}</nav><div className="header-actions"><AccountMenu native={native} onManage={()=>setAccountOpen(true)} notify={setStatus}/><button className="header-manage" onClick={()=>{setActiveTool(null);setManagerOpen(true);}}>管理</button><button onClick={()=>setSettingsOpen(true)} title="设置" aria-label="打开设置">⚙<span>设置</span></button><button aria-label={layout.topCollapsed?'展开顶栏':'折叠顶栏'} aria-expanded={!layout.topCollapsed} onClick={()=>toggle('topCollapsed')}>{layout.topCollapsed?'⌄':'⌃'}</button></div></div>

@@ -18,6 +18,15 @@ export function FileGlyph(){
  </svg>;
 }
 
+/** 点击规则（2026-11-17 拍板）：「单击选中、再点标题收起」——
+ * 点别的行＝选中它并展开；点已选中的行＝收起/展开它自己，选中保持不变。
+ * 0.1.32 的「整行点击＝选中+展开+切换」会让连续浏览子目录时每点一次抖一下。 */
+export function treeClick(node:{hasChild:boolean;open:boolean;selected:boolean}):'select-open'|'toggle'|'select'{
+ if(!node.hasChild) return 'select';
+ if(node.selected) return 'toggle';
+ return node.open?'select':'select-open';
+}
+
 export function FolderTree({nodes,selected,onSelect,onContext}:{nodes:FolderNode[];selected:string|null;onSelect:(path:string)=>void;onContext?:(path:string,event:React.MouseEvent)=>void}){
  const [expanded,setExpanded]=useState(new Set<string>()),[collapsed,setCollapsed]=useState(new Set<string>());
  const {children,roots}=useMemo(()=>{
@@ -32,7 +41,13 @@ export function FolderTree({nodes,selected,onSelect,onContext}:{nodes:FolderNode
  function render(node:FolderNode,depth:number):React.ReactNode{
   const nested=children.get(node.path)??[];const open=!collapsed.has(node.path)&&(depth<2||expanded.has(node.path));
   const hasChild=!!nested.length;
-  return <li key={node.path}><button type="button" className={`folder-row${selected===node.path?' selected':''}${hasChild&&open?' is-open':''}`} style={{paddingLeft:Math.min(depth,8)*12}} aria-current={selected===node.path?'location':undefined} aria-expanded={hasChild?open:undefined} title={displayPath(node.path)} onContextMenu={event=>{if(onContext){event.preventDefault();event.stopPropagation();onContext(node.path,event);}}} onClick={()=>{if(hasChild)toggle(node.path,open);onSelect(node.path);}}>
+  const action=treeClick({hasChild,open,selected:selected===node.path});
+  const onClick=()=>{
+   if(action==='select'){onSelect(node.path);return;}
+   if(action==='select-open'){onSelect(node.path);toggle(node.path,true);return;}
+   toggle(node.path,open); // 已选中：再点标题＝收起/展开，选中不动
+  };
+  return <li key={node.path}><button type="button" className={`folder-row${selected===node.path?' selected':''}${hasChild&&open?' is-open':''}`} style={{paddingLeft:Math.min(depth,8)*12}} aria-current={selected===node.path?'location':undefined} aria-expanded={hasChild?open:undefined} title={displayPath(node.path)} onContextMenu={event=>{if(onContext){event.preventDefault();event.stopPropagation();onContext(node.path,event);}}} onClick={onClick}>
    {hasChild?<FolderGlyph open={open}/>:<FileGlyph/>}
    <span className="folder-text">{node.name}</span>
    <small>{node.count}</small>
