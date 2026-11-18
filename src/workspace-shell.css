@@ -267,3 +267,15 @@
 .tag-card-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tag-card-count{font:10.5px var(--mono);color:var(--muted);flex:0 0 auto}
 .tag-index.is-empty .tag-index-empty{margin:0;padding:26px 8px;font-size:12px;line-height:1.8;color:var(--muted)}
+
+/* 波形视图切换：按钮 + 应用内菜单（原生 select 的下拉会被窗口边缘裁切） */
+.workspace-v2 .wave-mode-menu{position:relative;flex:0 0 auto}
+.workspace-v2 .wave-mode-trigger{min-height:22px;height:22px;padding:0 7px;gap:6px;border:1px solid var(--line);border-radius:4px;background:transparent;color:var(--muted);font-size:11px;white-space:nowrap}
+.workspace-v2 .wave-mode-trigger:hover{border-color:var(--accent);color:var(--text)}
+.workspace-v2 .wave-mode-trigger b{color:var(--text);font-weight:400}
+.workspace-v2 .wave-mode-caret{color:var(--muted);font-size:9px}
+.workspace-v2 .wave-mode-scrim{position:fixed;inset:0;z-index:39}
+.workspace-v2 .wave-mode-pop{position:absolute;top:calc(100% + 5px);left:0;z-index:40;min-width:132px;padding:4px;border:1px solid var(--line);border-radius:5px;background:var(--panel);box-shadow:0 14px 34px #000a;display:flex;flex-direction:column}
+.workspace-v2 .wave-mode-pop button{justify-content:flex-start;min-width:0;min-height:26px;height:26px;padding:0 8px;border:0;border-radius:3px;background:transparent;color:var(--muted);font-size:11px}
+.workspace-v2 .wave-mode-pop button:hover{background:var(--raised);color:var(--text)}
+.workspace-v2 .wave-mode-pop button.is-active{background:var(--accent-wash);color:var(--accent)}
