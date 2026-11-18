@@ -604,18 +604,6 @@ pub async fn player_waveform(id:String,simple:Option<bool>,catalog:tauri::State<
         cached_waveform(&path,cache.as_deref(),simple)
     }).await.map_err(|e|e.to_string())?
 }
-/// 去重工作台用：按「已被调用方校验过的外部绝对路径」取波形，不经过素材库 id。
-/// 这里只做解码与缓存，不打开声卡；路径合法性由调用方（dedup 模块）按 groups.json 白名单把关。
-pub fn waveform_path(path:&Path,cache:Option<&Path>,simple:bool)->Result<Waveform,String>{
-    let _guard=WAVE_DECODE_LOCK.lock().map_err(|_|"波形分析锁不可用".to_string())?;
-    cached_waveform(path,cache,simple)
-}
-/// 去重工作台用：按外部绝对路径试听，不写素材试听历史。
-pub fn load_external(player:&PlayerState,id:String,path:PathBuf,position:f64)->Result<PlayerSnapshot,String>{
-    validate_preview(position,f64::MAX)?;
-    validate_preview(position,crate::duration::seconds(&path).unwrap_or(f64::MAX))?;
-    player.request(Command::Load{id,path,position})
-}
 /// 设置页「预生成波形缓存」用：已有有效缓存返回 Ok(false) 直接跳过，否则生成简化小波形返回 Ok(true)。
 /// 调用方在批量循环里逐个检查取消标记；本函数只负责单条、且与界面读取共用解码锁。
 pub fn pregenerate_wave_cache(source:&Path,dir:&Path,simple:bool)->Result<bool,String>{

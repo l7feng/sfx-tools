@@ -85,7 +85,7 @@ function Catalog(){
  const [searchScope,setSearchScope]=useState<SearchScope>('global'),[tag,setTag]=useState<string|null>(null),[historyOnly,setHistoryOnly]=useState(false),[playlistId,setPlaylistId]=useState<string|null>(null);
  /** 标签索引页（0.1.34）：true 时主区铺标签网格，点标签才切回列表视图。 */
  const [tagIndex,setTagIndex]=useState(false);
- const [settingsOpen,setSettingsOpen]=useState(false),[managerOpen,setManagerOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[activeTool,setActiveTool]=useState<ToolPage|null>(null);
+ const [settingsOpen,setSettingsOpen]=useState(false),[managerOpen,setManagerOpen]=useState(()=>new URLSearchParams(location.search).has('manager')),[accountOpen,setAccountOpen]=useState(false),[activeTool,setActiveTool]=useState<ToolPage|null>(null);
  /** 插件工作区窗口（0.1.35）：入口在顶栏「音乐库」右侧，激活可插拔模块后在这里真正干活。 */
  const [pluginOpen,setPluginOpen]=useState(()=>new URLSearchParams(location.search).has('plugin'));
  const [page,setPage]=useState<CatalogPage>({items:[],total:0}),[offset,setOffset]=useState(0),[loadedOffset,setLoadedOffset]=useState(0),[jobs,setJobs]=useState<ImportJob[]>([]);

@@ -1,5 +1,6 @@
 export type ToolArea='library'|'production'|'info'|'extension'|'account';
-export type ToolKind='local'|'link';
+/** local=本程序内置｜link=网页外链｜app=外部程序（本机 exe，只负责启动）。 */
+export type ToolKind='local'|'link'|'app';
 /** ready=可用｜need=需先选素材｜dev=开发中｜link=外链，统一驱动卡片状态标签配色。 */
 export type ToolStatus='ready'|'need'|'dev'|'link';
 export type ToolEntry={
@@ -24,6 +25,8 @@ export const toolPages = [
  {id:'info',label:'音频信息',description:'查看所选素材的格式、采样率、声道、时长与文件大小。',keywords:'音频 规格 文件 时长 信息',area:'info',kind:'local',status:'need'},
  {id:'ucs-namer',label:'UCS 批量命名',description:'批量重命名与 CatID 规范化，命名清单确认后再落盘。',keywords:'UCS 批量 命名 CatID 外链',area:'extension',kind:'link',status:'link'},
  {id:'mus-prompt',label:'MUS Prompt',description:'配乐提示词与风格模板库，按项目复用提示词。',keywords:'MUS 提示词 prompt 配乐 外链',area:'extension',kind:'link',status:'link'},
+ // 外部程序：本程序只负责把它送到你面前，扫描/比对/隔离全在它自己的界面里做。
+ {id:'dedup',label:'Audio Dedup',description:'重复音频检测与隔离，独立程序；本程序只负责启动，处置在它自己的界面里逐次确认。',keywords:'去重 重复 Audio Dedup 隔离 清理 外部程序',area:'extension',kind:'app',status:'ready'},
  {id:'account',label:'账号与授权',description:'GitHub / Google 登录、手机绑定、设备与离线凭证。',keywords:'买断 支付 退款 交易 设备 激活 登录',area:'account',kind:'local',status:'ready'},
 ] as const satisfies readonly ToolEntry[];
 export type ToolPage = typeof toolPages[number]['id'];

@@ -28,6 +28,8 @@ const PATHS:Record<ToolPage,React.ReactNode>={
   'ucs-namer':<><path d="M4 5.6h8.4"/><path d="M4 12h5.6"/><path d="M4 18.4h4.2"/><path d="m15.4 8.4 3.2 3.2-5 5-3.7.5.5-3.7z"/></>,
   // MUS Prompt：对话气泡
   'mus-prompt':<><path d="M4.2 5.6h15.6v9.6H9.8L5.4 19.4v-4.2H4.2z"/><path d="M8 9.4h8"/><path d="M8 12.4h5"/></>,
+  // Audio Dedup：两枚叠放的波形块（重复 + 音频）
+  dedup:<><rect x="3.6" y="4.4" width="11.4" height="6.6" rx="1.6"/><rect x="9" y="13" width="11.4" height="6.6" rx="1.6"/><path d="M6.6 7.7h2.2l1.4 2 1.4-2h2"/></>,
 };
 
 export function ToolGlyph({id}:{id:ToolPage}){
