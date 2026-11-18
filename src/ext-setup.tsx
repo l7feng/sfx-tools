@@ -5,7 +5,7 @@ import {toolEntries,type ToolEntry} from './tool-navigation';
 import {locateApp} from './tools-window';
 import './ext-setup.css';
 
-/** 首次配置向导：把三个外部程序（MUS Prompt / UCS 批量命名 / Audio Dedup）一次配好。
+/** 首次配置向导：把三个外部程序（MUS Prompt / UCS Namer / Audio Dedup）一次配好。
  *
  *  为什么要有这一屏：这三张卡片在「管理 › 扩展」里，但对新装机器来说，程序在哪、
  *  装没装都不确定。与其让用户在卡片上一个个试，不如开局一次说清，配完就不再打扰。

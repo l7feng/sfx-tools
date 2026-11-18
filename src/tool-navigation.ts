@@ -25,7 +25,7 @@ export const toolPages = [
  {id:'plugins',label:'插件与制作连接',description:'扫描 VST3 候选；AAF / OMF 与宿主连接仍为只读骨架。',keywords:'VST3 DLL AAF OMF 插件 扫描 宿主',area:'production',kind:'local',status:'dev'},
  {id:'pt',label:'Pro Tools 导入预览',description:'检测连接与落点安排，不写工程、不批量渲染。',keywords:'PT Pro Tools 第三期 制作 导入',area:'production',kind:'local',status:'dev'},
  {id:'info',label:'音频信息',description:'查看所选素材的格式、采样率、声道、时长与文件大小。',keywords:'音频 规格 文件 时长 信息',area:'info',kind:'local',status:'need'},
- {id:'ucs-namer',label:'UCS 批量命名',description:'批量重命名与 CatID 规范化，命名清单确认后再落盘；独立程序，本程序只负责启动。',keywords:'UCS 批量 命名 CatID 外部程序',area:'extension',kind:'app',status:'ready',exe:'UCS Namer.exe'},
+ {id:'ucs-namer',label:'UCS Namer',description:'批量重命名与 CatID 规范化，命名清单确认后再落盘；独立程序，本程序只负责启动。',keywords:'UCS 批量 命名 CatID 外部程序',area:'extension',kind:'app',status:'ready',exe:'UCS Namer.exe'},
  {id:'mus-prompt',label:'MUS Prompt',description:'配乐提示词与风格模板库，按项目复用提示词；独立程序，本程序只负责启动。',keywords:'MUS 提示词 prompt 配乐 外部程序',area:'extension',kind:'app',status:'ready',exe:'MUS Prompt.exe'},
  // 外部程序：本程序只负责把它送到你面前，扫描/比对/隔离全在它自己的界面里做。
  {id:'dedup',label:'Audio Dedup',description:'重复音频检测与隔离，独立程序；本程序只负责启动，处置在它自己的界面里逐次确认。',keywords:'去重 重复 Audio Dedup 隔离 清理 外部程序',area:'extension',kind:'app',status:'ready',exe:'audio-dedup-gui.exe'},
