@@ -280,6 +280,9 @@ fn walk_for_exe(dir: &Path, depth: usize, budget: &mut u32) -> Option<PathBuf> {
             let name = path.file_name().and_then(|v| v.to_str()).unwrap_or("");
             // 跳过明显的系统与缓存目录，减少无意义遍历。
             if name.starts_with('.') || name.eq_ignore_ascii_case("Windows") || name.eq_ignore_ascii_case("node_modules") { continue; }
+            // 归档/备份目录里常留旧构建，跳过它们才不会把用户指到过期版本。
+            let lower = name.to_lowercase();
+            if lower.contains("archive") || lower.contains("归档") || lower.contains("重建前") || lower.contains(".bak") || lower.contains("backup") { continue; }
             if let Some(found) = walk_for_exe(&path, depth + 1, budget) { return Some(found); }
         }
     }

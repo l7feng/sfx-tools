@@ -1,0 +1,33 @@
+/* 首次配置向导：一次配好三个外部程序。配色沿用管理窗口的冷蓝，不用第三方 UI 库。 */
+.ext-setup{
+ width:720px;max-width:calc(100vw - 48px);
+ border:1px solid #2a323d;border-radius:14px;padding:0;
+ background:#0f1319;color:#d8dee7;
+ box-shadow:0 24px 64px rgba(0,0,0,.55);
+}
+.ext-setup::backdrop{background:rgba(6,9,13,.72);}
+.ext-setup-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:18px 22px 14px;border-bottom:1px solid #1f2732;}
+.ext-setup-head h1{margin:0;font-size:16px;font-weight:600;letter-spacing:.2px;}
+.ext-setup-head span{display:block;margin-top:6px;font-size:12px;color:#8b96a4;}
+.ext-setup-head button{width:28px;height:28px;border:0;border-radius:8px;background:#1a2028;color:#9aa5b3;font-size:16px;cursor:pointer;}
+.ext-setup-head button:hover{background:#222a34;color:#cfd7e2;}
+.ext-setup-body{padding:6px 22px 4px;}
+.ext-setup-row{display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid #18202a;}
+.ext-setup-row:last-of-type{border-bottom:0;}
+.ext-setup-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;}
+.ext-setup-main b{font-size:13px;font-weight:600;}
+.ext-setup-desc{font-size:12px;color:#7f8a98;line-height:1.5;}
+.ext-setup-state{font-size:11.5px;color:#6d7885;font-family:"Cascadia Mono",Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ext-setup-state.is-ok{color:#6aa9e0;}
+.ext-setup-pick{flex:0 0 auto;height:28px;padding:0 14px;border:1px solid #2a3644;border-radius:8px;background:#161d26;color:#b9c4d1;font-size:12px;cursor:pointer;}
+.ext-setup-pick:hover:not(:disabled){border-color:#35506b;color:#dbe5ef;}
+.ext-setup-pick:disabled{opacity:.55;cursor:default;}
+.ext-setup-flash{margin:10px 0 2px;font-size:12px;color:#8fa0b3;}
+.ext-setup-foot{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 22px 16px;border-top:1px solid #1f2732;}
+.ext-setup-foot>span{font-size:12px;color:#7f8a98;}
+.ext-setup-foot>div{display:flex;gap:8px;}
+.ext-setup-ghost{height:30px;padding:0 14px;border:1px solid #262f3a;border-radius:8px;background:transparent;color:#98a3b1;font-size:12px;cursor:pointer;}
+.ext-setup-ghost:hover:not(:disabled){border-color:#33414f;color:#cfd7e2;}
+.ext-setup-ghost:disabled{opacity:.5;cursor:default;}
+.ext-setup-primary{height:30px;padding:0 18px;border:1px solid #3a648c;border-radius:8px;background:#1d3550;color:#dbe8f5;font-size:12px;cursor:pointer;}
+.ext-setup-primary:hover{background:#24486c;}

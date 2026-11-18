@@ -9,9 +9,14 @@ pub fn startup_guard() -> Result<Option<fs::File>,String> {
         None=>{
             #[cfg(windows)] {
                 use windows::Win32::UI::WindowsAndMessaging::*;
+                // 明确弹窗：以前这里只在「找不到窗口」时提示，结果是新版双击后静默退出、
+                // 用户以为程序坏了。现在两种情况都告知，并说明该怎么做。
                 if let Some(window)=find_existing_window(){
                     unsafe{let _=ShowWindow(window,SW_RESTORE);let _=SetForegroundWindow(window);}
-                }else{message("SFX TOOLS 已在运行或正在启动，请切换到已有窗口。");}
+                    message("SFX TOOLS 已经在运行，已把已有窗口切到前台。\n\n如果窗口还是没有出现，请在任务栏里找回它；或先结束旧实例（含旧版本），再启动本次的程序。");
+                }else{
+                    message("SFX TOOLS 已经在运行或正在启动（可能是旧版本实例）。\n\n请在任务栏里找到它；或先结束旧实例（含旧版本），再启动本次的程序。");
+                }
             }
             Ok(None)
         },

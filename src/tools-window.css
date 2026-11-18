@@ -129,3 +129,5 @@
  .manager-group{display:none}
  .manager-rail-foot{display:none}
 }
+.manager-extset{height:24px;padding:0 10px;border:1px solid var(--line);border-radius:4px;background:transparent;color:var(--muted);font-size:11px;cursor:pointer}
+.manager-extset:hover{border-color:var(--accent);color:var(--text)}

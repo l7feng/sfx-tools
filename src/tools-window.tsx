@@ -23,6 +23,16 @@ const GROUP_LABEL:Record<ToolArea,string>={library:'素材库',production:'制�
 function readJson<T>(key:string,fallback:T):T{
  try{const raw=localStorage.getItem(key);return raw?JSON.parse(raw) as T:fallback;}catch{return fallback;}
 }
+/** 定位一个外部程序：Audio Dedup 走它自己的契约探测（顺带拿版本号），其余按文件名做有界遍历。 */
+export async function locateApp(entry:ToolEntry):Promise<{version:string;path:string}>{
+ if(entry.id==='dedup')return await invoke<{version:string;path:string}>('dedup_locate');
+ return await invoke<{version:string;path:string}>('extapp_locate',{name:entry.exe??''});
+}
+/** 启动一个外部程序：按 id 决定走哪条启动命令，路径一律先校验再说。 */
+export async function launchApp(entry:ToolEntry,exe:string){
+ if(entry.id==='dedup')return await invoke('dedup_launch_gui',{exe});
+ return await invoke('extapp_launch',{exe});
+}
 function sinceLabel(stamp:number){
  if(!stamp)return'';
  const diff=Date.now()-stamp;
@@ -36,26 +46,34 @@ function sinceLabel(stamp:number){
  * 管理窗口：音频工具从顶级页面收进右上角。
  * 1186×818 模态，左侧五组导航、右侧卡片网格；单个工具在窗口内展开，不跳页。
  */
-export function ToolsWindow({open,onClose,native,ids,selected,library,tool,onTool,onPick,onChanged,onCheck,onJobs,onAccount,busy}:{
+export function ToolsWindow({open,onClose,native,ids,selected,library,tool,onTool,onPick,onChanged,onCheck,onJobs,onAccount,onExtSetup,busy}:{
  open:boolean;onClose:()=>void;native:boolean;ids:string[];selected:CatalogAsset|null;library:'sound'|'music';
  tool:ToolPage|null;onTool:(tool:ToolPage|null)=>void;
- onPick:(asset:CatalogAsset)=>void;onChanged:()=>void;onCheck:()=>void;onJobs:()=>void;onAccount:()=>void;busy:boolean;
+ onPick:(asset:CatalogAsset)=>void;onChanged:()=>void;onCheck:()=>void;onJobs:()=>void;onAccount:()=>void;onExtSetup:()=>void;busy:boolean;
 }){
  const dialog=useRef<HTMLDialogElement>(null),search=useRef<HTMLInputElement>(null);
  const [query,setQuery]=useState(''),[usage,setUsage]=useState<Record<string,number>>(()=>readJson(USAGE_KEY,{})),[links,setLinks]=useState<Record<string,string>>(()=>readJson(LINK_KEY,{})),[custom,setCustom]=useState<CustomLink[]>(()=>readJson(CUSTOM_KEY,[]));
  const [draftName,setDraftName]=useState(''),[draftUrl,setDraftUrl]=useState(''),[editing,setEditing]=useState<string|null>(null),[draftLink,setDraftLink]=useState(''),[flash,setFlash]=useState('');
- // 外部程序（Audio Dedup）的版本与路径：窗口打开时定位一次，直接显示在卡片上，省得点进去才知道装了没。
- const [appInfo,setAppInfo]=useState<{version:string;path:string}|null>(null),[appLocating,setAppLocating]=useState(false);
+ // 外部程序的版本与路径：窗口打开时逐个定位一次，直接显示在卡片上，省得点进去才知道装了没。
+ const [appInfo,setAppInfo]=useState<Record<string,{version:string;path:string}>>({}),[appLocating,setAppLocating]=useState(false);
  useEffect(()=>{const element=dialog.current;if(!element)return;if(open&&!element.open)element.showModal();else if(!open&&element.open)element.close();},[open]);
  useEffect(()=>{if(!open)return;setQuery('');const timer=window.setTimeout(()=>search.current?.focus(),80);return()=>clearTimeout(timer);},[open]);
- // 打开管理窗口时定位一次外部程序，把版本与路径直接显示在卡片上（失败不打扰，点按钮时再让你选）。
+ // 打开管理窗口时逐个定位外部程序，把版本与路径直接显示在卡片上（失败不打扰，点按钮时再让你选）。
  useEffect(()=>{
   if(!open||!native)return;
   let alive=true;setAppLocating(true);
-  void invoke<{version:string;path:string}>('dedup_locate')
-   .then(info=>{if(alive)setAppInfo(info);})
-   .catch(()=>{if(alive)setAppInfo(null);})
-   .finally(()=>{if(alive)setAppLocating(false);});
+  const apps=toolEntries.filter(entry=>entry.kind==='app');
+  void Promise.all(apps.map(async entry=>{
+   try{
+    const info=await locateApp(entry);
+    return [entry.id,info] as const;
+   }catch{return null;}
+  })).then(rows=>{
+   if(!alive)return;
+   const found:Record<string,{version:string;path:string}>={};
+   rows.forEach(row=>{if(row)found[row[0]]=row[1];});
+   setAppInfo(found);
+  }).finally(()=>{if(alive)setAppLocating(false);});
   return()=>{alive=false;};
  },[open,native]);
  useEffect(()=>{try{localStorage.setItem(USAGE_KEY,JSON.stringify(usage));}catch{/* 记录失败不影响使用 */}},[usage]);
@@ -79,33 +97,39 @@ export function ToolsWindow({open,onClose,native,ids,selected,library,tool,onToo
   void invoke('open_external',{url:url.trim()}).then(()=>setFlash(`已在系统浏览器打开：${url.trim()}`)).catch(e=>setFlash(`无法打开链接：${String(e)}`));
  };
  /**
-  * 外部程序（目前只有 Audio Dedup）：本程序只负责启动它，不代管扫描与处置。
-  * 路径优先级：上次记录（后端）→ 自动定位 → 实在找不到才让你选一次并记住。
+  * 外部程序：本程序只负责启动它，不代管它内部怎么干活。
+  * 路径优先级：内存里的定位结果 → localStorage 记录 → 后端记录/自动定位 → 实在找不到才让你选一次并记住。
   */
- const openApp=(id:string)=>{
+ const openApp=(entry:ToolEntry)=>{
   if(!native){setFlash('外部程序需要桌面版，网页预览里不能启动。');return;}
-  setFlash('正在定位并启动…');
+  setFlash(`正在定位并启动 ${entry.label}…`);
   void (async()=>{
    try{
-    let exe=appInfo?.path??'';
-    try{if(!exe)exe=localStorage.getItem(`sound-workbench-app-${id}`)??'';}catch{/* 存储不可用就跳过 */}
-    if(!exe){const found=await invoke<{version:string;path:string}>('dedup_locate');exe=found.path;setAppInfo(found);try{localStorage.setItem(`sound-workbench-app-${id}`,exe);}catch{/* 同上 */}}
-    await invoke('dedup_launch_gui',{exe});
-    setFlash(`已启动 Audio Dedup${exe?`：${displayPath(exe)}`:''}`);
+    let exe=appInfo[entry.id]?.path??'';
+    try{if(!exe)exe=localStorage.getItem(`sound-workbench-app-${entry.id}`)??'';}catch{/* 存储不可用就跳过 */}
+    if(!exe){
+     const found=await locateApp(entry);
+     exe=found.path;
+     setAppInfo(old=>({...old,[entry.id]:found}));
+     try{localStorage.setItem(`sound-workbench-app-${entry.id}`,exe);}catch{/* 同上 */}
+    }
+    await launchApp(entry,exe);
+    setFlash(`已启动 ${entry.label}${exe?`：${displayPath(exe)}`:''}`);
    }catch(e){
     try{
-     const picked=await invoke<string|null>('plugin_pick_file',{initial:null,title:'选择 Audio Dedup 程序'});
+     const picked=await invoke<string|null>('plugin_pick_file',{initial:null,title:`选择 ${entry.label} 程序`});
      if(!picked){setFlash('未选择程序，已取消。');return;}
-     try{localStorage.setItem(`sound-workbench-app-${id}`,picked);}catch{/* 同上 */}
-     await invoke('dedup_launch_gui',{exe:picked});
+     try{localStorage.setItem(`sound-workbench-app-${entry.id}`,picked);}catch{/* 同上 */}
+     if(entry.exe)await invoke('extapp_remember',{name:entry.exe,path:picked});
+     await launchApp(entry,picked);
      setFlash(`已记住并启动：${displayPath(picked)}`);
-    }catch(inner){setFlash(`无法启动：${String(inner)}`);}
+    }catch(inner){setFlash(`无法启动 ${entry.label}：${String(inner)}`);}
    }
   })();
  };
  const activate=(entry:ToolEntry)=>{
   setUsage(old=>({...old,[entry.id]:Date.now()}));
-  if(entry.kind==='app'){openApp(entry.id);return;}
+  if(entry.kind==='app'){openApp(entry);return;}
   if(entry.area==='account'){onAccount();return;}
   onTool(entry.id as ToolPage);
  };
@@ -117,6 +141,17 @@ export function ToolsWindow({open,onClose,native,ids,selected,library,tool,onToo
 
  const card=(entry:ToolEntry)=>{
   const status=statusOf(entry),link=entry.kind==='link',app=entry.kind==='app';
+  // 外部程序的副文本：版本在前、路径在后。版本只在能代表程序本身时才显示——
+  // Audio Dedup 走自己的命令行契约给版本；Electron/PyInstaller 打包的 exe 文件版本是运行时版本，显示它反而误导。
+  const appMeta=(target:ToolEntry)=>{
+   const info=appInfo[target.id];
+   if(appLocating&&!info)return'正在定位程序…';
+   if(info){
+    const ver=target.id==='dedup'&&info.version?`v${info.version} · `:'';
+    return`${ver}${displayPath(info.path)}`;
+   }
+   return native?'未找到程序 · 点击后可手动选择一次':'本机独立程序 · 版本与路径在桌面版显示';
+  };
   const host=link?(hrefOf(entry.id).replace(/^https?:\/\//,'').replace(/\/.*$/,'')||'未配置地址'):'';
   return <article key={entry.id} className={`manager-card${link||app?' is-link':''}${current?.id===entry.id?' is-open':''}`}>
    <div className="manager-card-head">
@@ -126,7 +161,7 @@ export function ToolsWindow({open,onClose,native,ids,selected,library,tool,onToo
    </div>
    <p>{entry.description}</p>
    <div className="manager-card-foot">
-    <span className="manager-card-meta">{app?(appLocating?'正在定位程序…':(appInfo?('v'+appInfo.version+' · '+displayPath(appInfo.path)):(native?'未找到程序 · 点击后可手动选择一次':'本机独立程序 · 版本与路径在桌面版显示'))):(link?host:`${ids.length?`已选 ${ids.length} 条`:'未选择素材'}${usage[entry.id]?` · ${sinceLabel(usage[entry.id])}`:' · 尚未使用'}`)}</span>
+    <span className="manager-card-meta">{app?appMeta(entry):(link?host:`${ids.length?`已选 ${ids.length} 条`:'未选择素材'}${usage[entry.id]?` · ${sinceLabel(usage[entry.id])}`:' · 尚未使用'}`)}</span>
     {app
      ? <><span className="manager-card-sp"/><button className="manager-go" onClick={()=>activate(entry)}>打开 ↗</button></>
      : link
@@ -144,7 +179,7 @@ export function ToolsWindow({open,onClose,native,ids,selected,library,tool,onToo
  return <dialog ref={dialog} className="workspace-manager" onCancel={onClose} onClose={onClose} aria-labelledby="manager-title"
   onKeyDown={event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();search.current?.focus();search.current?.select();}}}>
   <header className="manager-head">
-   <h2 id="manager-title">管理</h2><span className="manager-sub">工具 · 扩展 · 账号</span>
+   <h2 id="manager-title">管理</h2><span className="manager-sub">工具 · 扩展 · 账号</span><button className="manager-extset" title="重新配置三个外部程序的路径" onClick={()=>onExtSetup()}>扩展配置</button>
    <label className="manager-search"><span aria-hidden="true">⌕</span><input ref={search} value={query} maxLength={120} aria-label="查找工具" placeholder="查找工具…" onChange={event=>setQuery(event.target.value)}/>{(query?<button aria-label="清除查找" onClick={()=>setQuery('')}>×</button>:<kbd>Ctrl K</kbd>)}</label>
    <button className="manager-close" onClick={onClose} aria-label="关闭管理窗口">✕</button>
   </header>

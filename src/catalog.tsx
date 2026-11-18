@@ -27,6 +27,7 @@ import {CatalogContext,type ContextTarget,type LibraryOverview} from './catalog-
 import {searchFolder,type SearchScope} from './search-scope';
 import {addToLayer} from './layer-tools';
 import {ToolsWindow} from './tools-window';
+import {ExtSetup,extSetupDone} from './ext-setup';
 import {AccountWindow} from './account-window';
 import {ErrorBoundary,installCrashHandlers} from './error-boundary';
 import {FavoriteChips,TagsIndex} from './saved-views';
@@ -85,7 +86,9 @@ function Catalog(){
  const [searchScope,setSearchScope]=useState<SearchScope>('global'),[tag,setTag]=useState<string|null>(null),[historyOnly,setHistoryOnly]=useState(false),[playlistId,setPlaylistId]=useState<string|null>(null);
  /** 标签索引页（0.1.34）：true 时主区铺标签网格，点标签才切回列表视图。 */
  const [tagIndex,setTagIndex]=useState(false);
- const [settingsOpen,setSettingsOpen]=useState(false),[managerOpen,setManagerOpen]=useState(()=>new URLSearchParams(location.search).has('manager')),[accountOpen,setAccountOpen]=useState(false),[activeTool,setActiveTool]=useState<ToolPage|null>(null);
+ const [settingsOpen,setSettingsOpen]=useState(false),[managerOpen,setManagerOpen]=useState(()=>new URLSearchParams(location.search).has('manager')),[extSetupOpen,setExtSetupOpen]=useState(()=>new URLSearchParams(location.search).has('extsetup')),[accountOpen,setAccountOpen]=useState(false),[activeTool,setActiveTool]=useState<ToolPage|null>(null);
+ // 首次启动（含新机器）把三个外部程序一次配好；配过就不再打扰，跳过的下次还能补。
+ useEffect(()=>{if(!native||extSetupDone())return;setExtSetupOpen(true);},[native]);
  /** 插件工作区窗口（0.1.35）：入口在顶栏「音乐库」右侧，激活可插拔模块后在这里真正干活。 */
  const [pluginOpen,setPluginOpen]=useState(()=>new URLSearchParams(location.search).has('plugin'));
  const [page,setPage]=useState<CatalogPage>({items:[],total:0}),[offset,setOffset]=useState(0),[loadedOffset,setLoadedOffset]=useState(0),[jobs,setJobs]=useState<ImportJob[]>([]);
@@ -362,8 +365,9 @@ function Catalog(){
   {sidebarPanel&&<SidebarQuickPanel key={sidebarPanel.kind} panel={sidebarPanel} overview={overview} onClose={()=>setSidebarPanel(null)} onSelect={(kind,id)=>{setSidebarPanel(null);if(kind==='favorites'){if(id==='__all__')showFavorites();else if(id==='__ungrouped__')selectFavoriteGroup(null,true);else selectFavoriteGroup(id,false);}else showCollection(kind==='tags'?'tag':'playlist',id);}}/>}
   <CatalogContext target={context} library={library} overview={overview} onClose={()=>setContext(null)} onChanged={contextChanged} notify={setStatus} onFavoriteGroup={(assets,x,y)=>setGroupMenu({x:x+14,y:y+14,ids:assets.map(asset=>asset.id)})} onLayer={(assets,scatter)=>{try{const result=addToLayer(assets,scatter);setStatus(`已添加 ${result.added} 个叠层片段，跳过 ${result.skipped} 个（需可用且时长已知）`);openTool('layer');}catch(e){setError(String(e));}}}/>
   <Settings open={settingsOpen} onClose={()=>setSettingsOpen(false)} value={preferences} onChange={setPreferences} onResetLayout={()=>setLayout(defaultLayout)} library={library} folder={folder} native={native} onOpenTool={tool=>{setSettingsOpen(false);openTool(tool);}}/>
-  <ToolsWindow open={managerOpen} onClose={()=>setManagerOpen(false)} native={native} ids={selectedIds} selected={selected} library={library} tool={activeTool} onTool={setActiveTool}
-   onPick={asset=>choose(asset)} onChanged={contextChanged} onCheck={()=>void checkMissing()} onJobs={()=>{setManagerOpen(false);setJobsOpen(true);}} onAccount={()=>{setManagerOpen(false);setAccountOpen(true);}} busy={busy||running}/>
+  <ExtSetup open={extSetupOpen} onClose={()=>setExtSetupOpen(false)} native={native}/>
+ <ToolsWindow open={managerOpen} onClose={()=>setManagerOpen(false)} native={native} ids={selectedIds} selected={selected} library={library} tool={activeTool} onTool={setActiveTool}
+   onPick={asset=>choose(asset)} onChanged={contextChanged} onCheck={()=>void checkMissing()} onJobs={()=>{setManagerOpen(false);setJobsOpen(true);}} onAccount={()=>{setManagerOpen(false);setAccountOpen(true);}} onExtSetup={()=>{setManagerOpen(false);setExtSetupOpen(true);}} busy={busy||running}/>
   <AccountWindow native={native} open={accountOpen} onClose={()=>setAccountOpen(false)}/>
   <PluginWorkspace native={native} open={pluginOpen} onClose={()=>setPluginOpen(false)} flags={{sfx_aaf_import:preferences.pluginAafImport,sfx_pt_overlay:preferences.pluginPtOverlay,sfx_pt_bouncer:preferences.pluginPtBouncer}}/>
   <NoticeStack/>
