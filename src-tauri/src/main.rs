@@ -4,6 +4,7 @@ mod drag_probe;
 mod catalog;
 mod duration;
 mod folder_picker;
+mod dedup;
 mod player;
 mod desktop;
 mod protools;
@@ -109,6 +110,9 @@ fn main() {
             catalog::catalog_folders,
             folder_picker::catalog_pick_folder,
             folder_picker::plugin_pick_file,
+            dedup::dedup_probe,
+            dedup::dedup_run,
+            dedup::dedup_groups,
             folder_picker::settings_pick_folder,
             catalog::catalog_set_favorite,
             catalog::catalog_set_favorite_group,

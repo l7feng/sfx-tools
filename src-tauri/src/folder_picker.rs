@@ -71,6 +71,19 @@ mod native {
         }
     }
 
+    pub(super) async fn choose_file(window: tauri::Window, initial: Option<String>, title: String) -> Result<Option<String>, String> {
+        PICKER_ACTIVE.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| "目录选择窗口已经打开。".to_string())?;
+        let guard = ActiveGuard;
+        let owner = window.hwnd().map_err(|e| format!("无法取得工作台窗口：{e}"))?.0 as usize;
+        let thread = std::thread::Builder::new().name("catalog-folder-picker".into())
+            .spawn(move || { let _guard = guard; choose_on_sta(owner, initial, &title, false) })
+            .map_err(|e| format!("无法启动目录选择器：{e}"))?;
+        tauri::async_runtime::spawn_blocking(move || thread.join()
+            .map_err(|_| "目录选择器线程异常退出。".to_string())?)
+            .await.map_err(|e| format!("等待目录选择结果失败：{e}"))?
+    }
+
     pub(super) async fn choose(window: tauri::Window, initial: Option<String>, title: &'static str, folders: bool) -> Result<Option<String>, String> {
         PICKER_ACTIVE.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .map_err(|_| "目录选择窗口已经打开。".to_string())?;
@@ -95,13 +108,16 @@ pub async fn catalog_pick_folder(window: tauri::Window, initial: Option<String>)
     { let _ = (window, initial); Err("当前目录选择器仅支持 Windows。".into()) }
 }
 
-/// 插件工作区「AAF／OMF 导入」专用：同一个 Windows 选择器，改成选单个文件。
+/// 单文件选择器：插件工作区用（AAF／OMF、外部去重程序），标题由调用方给。
 #[tauri::command]
-pub async fn plugin_pick_file(window: tauri::Window, initial: Option<String>) -> Result<Option<String>, String> {
+pub async fn plugin_pick_file(window: tauri::Window, initial: Option<String>, title: Option<String>) -> Result<Option<String>, String> {
     #[cfg(target_os = "windows")]
-    { native::choose(window, initial, "选择 AAF / OMF 文件", false).await }
+    {
+        let heading = title.unwrap_or_else(|| "选择文件".into());
+        native::choose_file(window, initial, heading).await
+    }
     #[cfg(not(target_os = "windows"))]
-    { let _ = (window, initial); Err("当前文件选择器仅支持 Windows。".into()) }
+    { let _ = (window, initial, title); Err("当前文件选择器仅支持 Windows。".into()) }
 }
 
 /// 设置页「波形图缓存路径」专用：同一个 Windows 目录选择器，只是标题不同。

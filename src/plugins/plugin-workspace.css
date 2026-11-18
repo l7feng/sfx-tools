@@ -29,7 +29,7 @@
 .plugin-workspace .pw-row button:hover:not(:disabled){border-color:var(--accent-line);color:var(--accent)}
 .plugin-workspace .pw-row button:disabled{opacity:.45;cursor:not-allowed}
 .plugin-workspace .pw-primary{border-color:var(--accent-line);color:var(--accent);background:var(--accent-wash)}
-.plugin-workspace .pw-path{font:11px var(--mono);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:760px}
+.plugin-workspace .pw-path{font:11px var(--mono);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:760px;min-width:0;flex:1 1 200px}
 .plugin-workspace .pw-hint{font-size:11px;color:var(--muted)}
 .plugin-workspace .pw-result{border:1px solid var(--line);border-radius:5px;background:var(--raised);padding:9px 11px}
 .plugin-workspace .pw-result.is-fail{border-color:var(--danger-line,#5a2a2c)}
@@ -49,3 +49,13 @@
 /* 顶栏入口：紧跟「音乐库」右侧，和页面按钮同一视觉语言，但用竖线分隔表示不是同一类页面 */
 .workspace-plugin-entry{border-left:1px solid var(--line)!important;padding-left:12px!important;color:var(--muted)}
 .workspace-plugin-entry:hover{color:var(--accent)}
+/* Audio Dedup（外部工具）条目：rail 上的扩展标记 + 汇总卡与分组表 */
+.plugin-workspace .pw-rail-state.ext{color:var(--muted);border-top:1px solid var(--line);padding-top:1px}
+.plugin-workspace .dedup-summary{padding:9px 11px}
+.plugin-workspace .dedup-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 9px}
+.plugin-workspace .dedup-chips span{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:1px 7px}
+.plugin-workspace .dedup-chips b{color:var(--text);font-weight:500;margin-left:2px}
+.plugin-workspace .dedup-table{width:100%;border-collapse:collapse;font-size:11px}
+.plugin-workspace .dedup-table th,.plugin-workspace .dedup-table td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.plugin-workspace .dedup-table th{color:var(--muted);font-weight:400;font-size:10.5px}
+.plugin-workspace .dedup-table td:last-child{color:var(--accent)}
