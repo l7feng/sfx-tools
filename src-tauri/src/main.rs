@@ -108,6 +108,7 @@ fn main() {
             catalog::catalog_history,
             catalog::catalog_folders,
             folder_picker::catalog_pick_folder,
+            folder_picker::plugin_pick_file,
             folder_picker::settings_pick_folder,
             catalog::catalog_set_favorite,
             catalog::catalog_set_favorite_group,

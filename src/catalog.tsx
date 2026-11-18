@@ -31,6 +31,7 @@ import {AccountWindow} from './account-window';
 import {ErrorBoundary,installCrashHandlers} from './error-boundary';
 import {FavoriteChips,TagsIndex} from './saved-views';
 import {armedLabels,getArmed} from './audio-toolbar';
+import {PluginWorkspace} from './plugins/workspace';
 import {notify,NoticeStack} from './notices';
 import {TaskChip,TaskDrawer} from './task-center';
 import type {ToolPage} from './tool-navigation';
@@ -85,6 +86,8 @@ function Catalog(){
  /** 标签索引页（0.1.34）：true 时主区铺标签网格，点标签才切回列表视图。 */
  const [tagIndex,setTagIndex]=useState(false);
  const [settingsOpen,setSettingsOpen]=useState(false),[managerOpen,setManagerOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[activeTool,setActiveTool]=useState<ToolPage|null>(null);
+ /** 插件工作区窗口（0.1.35）：入口在顶栏「音乐库」右侧，激活可插拔模块后在这里真正干活。 */
+ const [pluginOpen,setPluginOpen]=useState(false);
  const [page,setPage]=useState<CatalogPage>({items:[],total:0}),[offset,setOffset]=useState(0),[loadedOffset,setLoadedOffset]=useState(0),[jobs,setJobs]=useState<ImportJob[]>([]);
  const [query,setQuery]=useState(''),[format,setFormat]=useState('全部格式'),[selected,setSelected]=useState<CatalogAsset|null>(null),[selection,setSelection]=useState<string[]>([]);
  const [debouncedQuery,setDebouncedQuery]=useState(''),[sort,setSort]=useState('name'),[favoritesOnly,setFavoritesOnly]=useState(false),[favoriteGroup,setFavoriteGroup]=useState<string|null>(null),[favoriteUngrouped,setFavoriteUngrouped]=useState(false),[loadedKey,setLoadedKey]=useState('');
@@ -285,7 +288,7 @@ function Catalog(){
  return <div className={`app-shell catalog-shell workspace-v2 wave-${preferences.waveColor}`} style={{...style,'--tree-row':preferences.treeDensity==='standard'?'28px':'24px'} as React.CSSProperties}>
   {dragging&&<div className="folder-drop-overlay"><strong>松开以检查素材文件夹</strong><span>添加至{pageNames[library]} · 确认后才导入</span></div>}
   <header className={`workspace-header ${layout.topCollapsed?'is-collapsed':''}`}>
-   <div className="workspace-navigation"><div className="compact-brand"><BrandMark/></div><nav aria-label="工作台页面">{(['sound','music'] as WorkspacePage[]).map(item=><button key={item} aria-current={workspacePage===item?'page':undefined} onClick={()=>switchPage(item)}>{pageNames[item]}</button>)}</nav><div className="header-actions"><AccountMenu native={native} onManage={()=>setAccountOpen(true)} notify={setStatus}/><button className="header-manage" onClick={()=>{setActiveTool(null);setManagerOpen(true);}}>管理</button><button onClick={()=>setSettingsOpen(true)} title="设置" aria-label="打开设置">⚙<span>设置</span></button><button aria-label={layout.topCollapsed?'展开顶栏':'折叠顶栏'} aria-expanded={!layout.topCollapsed} onClick={()=>toggle('topCollapsed')}>{layout.topCollapsed?'⌄':'⌃'}</button></div></div>
+   <div className="workspace-navigation"><div className="compact-brand"><BrandMark/></div><nav aria-label="工作台页面">{(['sound','music'] as WorkspacePage[]).map(item=><button key={item} aria-current={workspacePage===item?'page':undefined} onClick={()=>switchPage(item)}>{pageNames[item]}</button>)}<button className="workspace-plugin-entry" aria-haspopup="dialog" aria-expanded={pluginOpen} title="插件工作区：AAF／OMF 导入、PT 叠层探测、批量导出预览（只读）" onClick={()=>setPluginOpen(true)}>扩展</button></nav><div className="header-actions"><AccountMenu native={native} onManage={()=>setAccountOpen(true)} notify={setStatus}/><button className="header-manage" onClick={()=>{setActiveTool(null);setManagerOpen(true);}}>管理</button><button onClick={()=>setSettingsOpen(true)} title="设置" aria-label="打开设置">⚙<span>设置</span></button><button aria-label={layout.topCollapsed?'展开顶栏':'折叠顶栏'} aria-expanded={!layout.topCollapsed} onClick={()=>toggle('topCollapsed')}>{layout.topCollapsed?'⌄':'⌃'}</button></div></div>
    {!layout.topCollapsed&&<div className="workspace-commandbar"><button className="add-source" disabled={!native||busy||running} onClick={openImport}>＋ 添加{pageNames[library]==='音乐库'?'音乐':'音效'}</button><label className="source-location"><span>素材位置</span><select aria-label="素材存放位置（原路径筛选）" value={folder??''} onChange={event=>selectFolder(event.target.value||null)}><option value="">全部{pageNames[library]}位置</option>{folders.map(node=><option key={node.path} value={node.path}>{displayPath(node.path)}</option>)}</select></label><div className="top-search"><button className="search-scope" aria-label="切换全局或当前文件夹搜索" aria-pressed={searchScope==='folder'} disabled={!folder} title={folder?'点击切换全局/当前文件夹':'未选择文件夹，搜索当前库全部位置'} onClick={()=>{setSearchScope(value=>value==='global'?'folder':'global');setOffset(0);}}>{searchScope==='folder'&&folder?'当前文件夹':'全局'}</button><span aria-hidden="true">⌕</span><button className="search-toggle" aria-pressed={preferences.multilingualSearch} title="跨语言搜索：输一种语言，同时搜中/英/日；公式与分类搜索不受影响" onClick={()=>setPreferences(old=>({...old,multilingualSearch:!old.multilingualSearch}))}>跨语言</button><button className="search-toggle" aria-pressed={preferences.metadataSearch} title="含元数据：搜索时一并匹配 WAV 内嵌的 BWF / iXML 描述、场景、备注、关键词、分类与许可证等；关闭后只搜文件名。此开关与设置 > 素材库联动，改动会保存" onClick={()=>setPreferences(old=>({...old,metadataSearch:!old.metadataSearch}))}>含元数据</button><input ref={search} aria-label={preferences.metadataSearch?'搜索素材名称、路径、标签和内嵌元数据':'搜索素材文件名'} placeholder={preferences.metadataSearch?`搜索${pageNames[library]}名称、路径、标签、元数据…`:`搜索${pageNames[library]}文件名…`} value={query} maxLength={1024} onChange={event=>setQuery(event.target.value)}/>{query?<button aria-label="清除搜索" onClick={()=>setQuery('')}>×</button>:<kbd>Ctrl K</kbd>}</div></div>}
   </header>
   {error&&<div className="catalog-error shell-error" role="alert">{error}<button onClick={()=>setError('')} aria-label="关闭错误提示">×</button></div>}
@@ -362,6 +365,7 @@ function Catalog(){
   <ToolsWindow open={managerOpen} onClose={()=>setManagerOpen(false)} native={native} ids={selectedIds} selected={selected} library={library} tool={activeTool} onTool={setActiveTool}
    onPick={asset=>choose(asset)} onChanged={contextChanged} onCheck={()=>void checkMissing()} onJobs={()=>{setManagerOpen(false);setJobsOpen(true);}} onAccount={()=>{setManagerOpen(false);setAccountOpen(true);}} busy={busy||running}/>
   <AccountWindow native={native} open={accountOpen} onClose={()=>setAccountOpen(false)}/>
+  <PluginWorkspace native={native} open={pluginOpen} onClose={()=>setPluginOpen(false)} flags={{sfx_aaf_import:preferences.pluginAafImport,sfx_pt_overlay:preferences.pluginPtOverlay,sfx_pt_bouncer:preferences.pluginPtBouncer}}/>
   <NoticeStack/>
  </div>;
 }

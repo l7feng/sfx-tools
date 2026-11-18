@@ -36,7 +36,7 @@ mod native {
         fn drop(&mut self) { unsafe { CoTaskMemFree(Some(self.0.0.cast())); } }
     }
 
-    fn choose_on_sta(owner: usize, initial: Option<String>, title: &str) -> Result<Option<String>, String> {
+    fn choose_on_sta(owner: usize, initial: Option<String>, title: &str, folders: bool) -> Result<Option<String>, String> {
         unsafe {
             CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()
                 .map_err(|e| format!("初始化目录选择器失败：{e}"))?;
@@ -44,8 +44,9 @@ mod native {
             let dialog: IFileOpenDialog = CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER)
                 .map_err(|e| format!("创建目录选择器失败：{e}"))?;
             let options = dialog.GetOptions().map_err(|e| e.to_string())?;
-            dialog.SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST)
-                .map_err(|e| e.to_string())?;
+            // 插件工作区要选单个文件（AAF/OMF），其余场景仍选目录。
+            let mode = if folders { FOS_PICKFOLDERS | FOS_PATHMUSTEXIST } else { FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST };
+            dialog.SetOptions(options | mode).map_err(|e| e.to_string())?;
             dialog.SetTitle(&HSTRING::from(title))
                 .map_err(|e| e.to_string())?;
             if let Some(path) = initial {
@@ -70,7 +71,7 @@ mod native {
         }
     }
 
-    pub(super) async fn choose(window: tauri::Window, initial: Option<String>, title: &'static str) -> Result<Option<String>, String> {
+    pub(super) async fn choose(window: tauri::Window, initial: Option<String>, title: &'static str, folders: bool) -> Result<Option<String>, String> {
         PICKER_ACTIVE.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .map_err(|_| "目录选择窗口已经打开。".to_string())?;
         let guard = ActiveGuard;
@@ -78,7 +79,7 @@ mod native {
         // 不在已有后台线程初始化 COM：该线程可能已使用其他 apartment 模式。
         // 只把纯 Rust 值传入专用 STA 线程，COM 接口在该线程内创建并释放。
         let thread = std::thread::Builder::new().name("catalog-folder-picker".into())
-            .spawn(move || { let _guard = guard; choose_on_sta(owner, initial, title) })
+            .spawn(move || { let _guard = guard; choose_on_sta(owner, initial, title, folders) })
             .map_err(|e| format!("无法启动目录选择器：{e}"))?;
         tauri::async_runtime::spawn_blocking(move || thread.join()
             .map_err(|_| "目录选择器线程异常退出。".to_string())?)
@@ -89,16 +90,25 @@ mod native {
 #[tauri::command]
 pub async fn catalog_pick_folder(window: tauri::Window, initial: Option<String>) -> Result<Option<String>, String> {
     #[cfg(target_os = "windows")]
-    { native::choose(window, initial, "选择音效素材文件夹").await }
+    { native::choose(window, initial, "选择音效素材文件夹", true).await }
     #[cfg(not(target_os = "windows"))]
     { let _ = (window, initial); Err("当前目录选择器仅支持 Windows。".into()) }
+}
+
+/// 插件工作区「AAF／OMF 导入」专用：同一个 Windows 选择器，改成选单个文件。
+#[tauri::command]
+pub async fn plugin_pick_file(window: tauri::Window, initial: Option<String>) -> Result<Option<String>, String> {
+    #[cfg(target_os = "windows")]
+    { native::choose(window, initial, "选择 AAF / OMF 文件", false).await }
+    #[cfg(not(target_os = "windows"))]
+    { let _ = (window, initial); Err("当前文件选择器仅支持 Windows。".into()) }
 }
 
 /// 设置页「波形图缓存路径」专用：同一个 Windows 目录选择器，只是标题不同。
 #[tauri::command]
 pub async fn settings_pick_folder(window: tauri::Window, initial: Option<String>) -> Result<Option<String>, String> {
     #[cfg(target_os = "windows")]
-    { native::choose(window, initial, "选择波形图缓存目录").await }
+    { native::choose(window, initial, "选择波形图缓存目录", true).await }
     #[cfg(not(target_os = "windows"))]
     { let _ = (window, initial); Err("当前目录选择器仅支持 Windows。".into()) }
 }

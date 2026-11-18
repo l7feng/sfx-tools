@@ -1,0 +1,51 @@
+/* 插件工作区窗口（0.1.35）：1108×720 模态，左窄栏选模块、右侧干活。
+   配色沿用主界面 token，激活项用 accent，和「跨语言 / 含元数据」同一套语言。 */
+
+.plugin-workspace{width:1108px;max-width:calc(100vw - 40px);height:min(520px,calc(100vh - 32px));max-height:calc(100vh - 32px);padding:0;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface,#16181c);color:var(--text);overflow:hidden}
+.plugin-workspace::backdrop{background:#000a;backdrop-filter:blur(2px)}
+.plugin-workspace .pw-head{display:flex;align-items:center;gap:12px;height:46px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--raised)}
+.plugin-workspace .pw-head h1{margin:0;font-size:14px;font-weight:600;letter-spacing:.2px}
+.plugin-workspace .pw-mode{margin-left:10px;font:10.5px var(--mono);color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:1px 6px}
+.plugin-workspace .pw-head button{margin-left:auto;width:26px;min-width:26px;height:24px;padding:0;border:1px solid var(--overlay);border-radius:3px;background:transparent;color:var(--muted);font-size:14px;cursor:pointer}
+.plugin-workspace .pw-head button:hover{color:var(--text);border-color:var(--line-strong)}
+.plugin-workspace .pw-body{display:grid;grid-template-columns:214px 1fr;min-height:0;max-height:calc(100vh - 96px)}
+.plugin-workspace .pw-rail{display:flex;flex-direction:column;gap:2px;padding:8px;border-right:1px solid var(--line);background:var(--surface-2,#131519);overflow:auto}
+.plugin-workspace .pw-rail>button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:7px 9px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+.plugin-workspace .pw-rail>button:hover{background:var(--overlay)}
+.plugin-workspace .pw-rail>button.is-active{border-color:var(--accent-line);background:var(--accent-wash);color:var(--accent)}
+.plugin-workspace .pw-rail-name{font-size:12px;font-weight:500}
+.plugin-workspace .pw-rail-state{font:10px var(--mono);color:var(--muted)}
+.plugin-workspace .pw-rail-state.on{color:var(--accent)}
+.plugin-workspace .pw-rail-note{margin:10px 2px 0;font-size:10.5px;line-height:1.7;color:var(--muted)}
+.plugin-workspace .pw-work{display:flex;flex-direction:column;gap:8px;padding:12px 14px;overflow:auto;min-height:0}
+.plugin-workspace .pw-title{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.plugin-workspace .pw-title h2{margin:0;font-size:15px;font-weight:600}
+.plugin-workspace .pw-title code{font:10.5px var(--mono);color:var(--muted)}
+.plugin-workspace .pw-deps{font-size:11px;color:var(--muted)}
+.plugin-workspace .pw-steps{margin:0;font-size:11.5px;line-height:1.85;color:var(--muted);max-width:820px}
+.plugin-workspace .pw-warn{margin:0;padding:6px 9px;border:1px solid var(--warn-line,#6a5320);border-radius:4px;background:var(--warn-wash,#2a230f);font-size:11.5px;line-height:1.7;color:var(--warn-text,#e7c56a)}
+.plugin-workspace .pw-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.plugin-workspace .pw-row button{min-height:28px;padding:0 12px;border:1px solid var(--line);border-radius:4px;background:var(--raised);color:var(--text);font-size:12px;cursor:pointer}
+.plugin-workspace .pw-row button:hover:not(:disabled){border-color:var(--accent-line);color:var(--accent)}
+.plugin-workspace .pw-row button:disabled{opacity:.45;cursor:not-allowed}
+.plugin-workspace .pw-primary{border-color:var(--accent-line);color:var(--accent);background:var(--accent-wash)}
+.plugin-workspace .pw-path{font:11px var(--mono);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:760px}
+.plugin-workspace .pw-hint{font-size:11px;color:var(--muted)}
+.plugin-workspace .pw-result{border:1px solid var(--line);border-radius:5px;background:var(--raised);padding:9px 11px}
+.plugin-workspace .pw-result.is-fail{border-color:var(--danger-line,#5a2a2c)}
+.plugin-workspace .pw-result header{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.plugin-workspace .pw-result header strong{font-size:12.5px}
+.plugin-workspace .pw-code{font:10px var(--mono);color:var(--muted)}
+.plugin-workspace .pw-result p{margin:0 0 6px;font-size:11.5px;line-height:1.7;color:var(--text)}
+.plugin-workspace .pw-result pre{margin:0;max-height:190px;overflow:auto;padding:7px 9px;border-radius:4px;background:var(--surface-2,#131519);font:10.5px/1.65 var(--mono);color:var(--muted);white-space:pre-wrap;word-break:break-all}
+.plugin-workspace .pw-result ul{margin:6px 0 0;padding-left:16px;font-size:11px;line-height:1.7;color:var(--muted)}
+.plugin-workspace .pw-evidence{margin-left:auto;font:10px var(--mono);padding:1px 6px;border-radius:3px;border:1px solid var(--line);color:var(--muted)}
+.plugin-workspace .pw-evidence.ev-static_parse,.plugin-workspace .pw-evidence.ev-local_probe{color:var(--accent);border-color:var(--accent-line)}
+.plugin-workspace .pw-evidence.ev-pt_live{color:var(--ok,#69c48a);border-color:var(--ok-line,#2d5338)}
+.plugin-workspace .pw-evidence.ev-none,.plugin-workspace .pw-evidence.ev-contract_only{color:var(--muted)}
+.plugin-workspace .pw-error{margin:0;font-size:11.5px;color:var(--danger,#e5484d)}
+.plugin-workspace .pw-foot{margin-top:16px;padding-top:9px;border-top:1px solid var(--line);font-size:10.5px;line-height:1.7;color:var(--muted)}
+.plugin-workspace .pw-foot code{font:10.5px var(--mono);color:var(--accent)}
+/* 顶栏入口：紧跟「音乐库」右侧，和页面按钮同一视觉语言，但用竖线分隔表示不是同一类页面 */
+.workspace-plugin-entry{border-left:1px solid var(--line)!important;padding-left:12px!important;color:var(--muted)}
+.workspace-plugin-entry:hover{color:var(--accent)}
