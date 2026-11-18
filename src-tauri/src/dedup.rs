@@ -110,21 +110,25 @@ fn tail(text: &[u8]) -> String {
     if chars.len() <= TAIL_CHARS { s } else { chars[chars.len() - TAIL_CHARS..].iter().collect() }
 }
 
+fn probe_exe(path: &Path) -> Result<DedupProbe, String> {
+    let out = Command::new(path).arg("--cli").arg("--version").output()
+        .map_err(|e| format!("无法启动去重程序：{e}"))?;
+    if !out.status.success() {
+        return Err(format!("去重程序不支持 --cli（退出码 {:?}）：{}", out.status.code(), tail(&out.stderr)));
+    }
+    let version = String::from_utf8_lossy(&out.stdout).trim().lines().next().unwrap_or("").trim().to_string();
+    if version.is_empty() {
+        return Err("去重程序没有返回版本号，无法确认命令行契约。".into());
+    }
+    Ok(DedupProbe { version, path: path.to_string_lossy().to_string() })
+}
+
 /// 探测：跑一次 `--cli --version`，确认这个 exe 真的支持命令行契约。
 #[tauri::command]
 pub async fn dedup_probe(exe: String) -> Result<DedupProbe, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let path = check_exe(&exe)?;
-        let out = Command::new(&path).arg("--cli").arg("--version").output()
-            .map_err(|e| format!("无法启动去重程序：{e}"))?;
-        if !out.status.success() {
-            return Err(format!("去重程序不支持 --cli（退出码 {:?}）：{}", out.status.code(), tail(&out.stderr)));
-        }
-        let version = String::from_utf8_lossy(&out.stdout).trim().lines().next().unwrap_or("").trim().to_string();
-        if version.is_empty() {
-            return Err("去重程序没有返回版本号，无法确认命令行契约。".into());
-        }
-        Ok(DedupProbe { version, path: path.to_string_lossy().to_string() })
+        probe_exe(&path)
     }).await.map_err(|e| e.to_string())?
 }
 
@@ -378,6 +382,96 @@ pub fn dedup_open_workbench(app: tauri::AppHandle, workdir: String, group: Strin
     Ok(())
 }
 
+// ---------- 程序定位：不让用户每次都去找 exe 路径 ----------
+//
+// 查找顺序：① 上次记下的路径（%APPDATA%\sfx-tools\dedup-exe.txt）→ ② 受限目录遍历。
+// 遍历是**有界**的：只在少数常见安装根下按名称找 audio-dedup-gui.exe，限制目录深度与节点数，
+// 不扫全盘、不进系统目录，避免一次误操作把磁盘读穿。
+
+const EXE_NAME: &str = "audio-dedup-gui.exe";
+const WALK_MAX_DEPTH: usize = 4;
+const WALK_MAX_NODES: u32 = 4000;
+
+fn exe_record() -> PathBuf { default_workdir().join("exe.txt") }
+
+fn read_record() -> Option<PathBuf> {
+    let raw = std::fs::read_to_string(exe_record()).ok()?;
+    let path = PathBuf::from(raw.trim().trim_matches('"'));
+    check_exe(&path.to_string_lossy()).ok()
+}
+
+fn write_record(path: &Path) -> Result<(), String> {
+    let dir = default_workdir();
+    std::fs::create_dir_all(&dir).map_err(|e| format!("无法建立索引目录：{e}"))?;
+    std::fs::write(exe_record(), path.to_string_lossy().as_bytes())
+        .map_err(|e| format!("无法记住去重程序路径：{e}"))
+}
+
+fn walk_for_exe(dir: &Path, depth: usize, budget: &mut u32) -> Option<PathBuf> {
+    if *budget == 0 || depth > WALK_MAX_DEPTH { return None; }
+    let entries = std::fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        if *budget == 0 { return None; }
+        *budget -= 1;
+        let path = entry.path();
+        let meta = match std::fs::symlink_metadata(&path) { Ok(m) => m, Err(_) => continue };
+        // 链接与目录联接一律不跟，避免遍历逃逸到预期之外的盘。
+        #[cfg(windows)]
+        { use std::os::windows::fs::MetadataExt; if meta.file_attributes() & 0x400 != 0 { continue; } }
+        if meta.is_file() {
+            if path.file_name().and_then(|v| v.to_str()).is_some_and(|name| name.eq_ignore_ascii_case(EXE_NAME)) {
+                return Some(path);
+            }
+        } else if meta.is_dir() {
+            let name = path.file_name().and_then(|v| v.to_str()).unwrap_or("");
+            // 跳过明显的系统与缓存目录，减少无意义遍历。
+            if name.starts_with('.') || name.eq_ignore_ascii_case("Windows") || name.eq_ignore_ascii_case("node_modules") { continue; }
+            if let Some(found) = walk_for_exe(&path, depth + 1, budget) { return Some(found); }
+        }
+    }
+    None
+}
+
+fn search_exe() -> Option<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    // 用户自己的工作盘布局优先：常见「工具\Exe」聚合目录。
+    roots.push(PathBuf::from(r"D:\Ai-Files\Tools\Exe"));
+    for key in ["LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)"] {
+        if let Ok(value) = std::env::var(key) {
+            let base = PathBuf::from(value);
+            roots.push(base.join("Programs"));
+            roots.push(base);
+        }
+    }
+    for root in roots {
+        if !root.is_dir() { continue; }
+        let mut budget = WALK_MAX_NODES;
+        if let Some(found) = walk_for_exe(&root, 0, &mut budget) { return Some(found); }
+    }
+    None
+}
+
+/// 自动定位去重程序：先读记录，再按有界遍历找；找到就顺手验一次契约。
+#[tauri::command]
+pub async fn dedup_locate() -> Result<DedupProbe, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = match read_record().or_else(search_exe) {
+            Some(path) => path,
+            None => return Err("没有找到 audio-dedup-gui.exe。手动选一次即可，之后会自动记住。".into()),
+        };
+        let probe = probe_exe(&path)?;
+        let _ = write_record(&path);
+        Ok(probe)
+    }).await.map_err(|e| e.to_string())?
+}
+
+/// 记住用户手动选中的程序路径，下次启动直接复用。
+#[tauri::command]
+pub fn dedup_remember_exe(path: String) -> Result<(), String> {
+    let checked = check_exe(&path)?;
+    write_record(&checked)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -429,6 +523,17 @@ mod tests {
         // 不在 groups.json 里的路径一律拒绝：界面无法借这条通道读任意文件。
         assert!(check_member(&temp, &outside.to_string_lossy(), &cache).is_err());
         std::fs::remove_dir_all(&temp).ok();
+    }
+
+    #[test]
+    fn search_finds_the_packaged_exe_when_the_tools_root_exists() {
+        // 这台机器上 D:\Ai-Files\Tools\Exe 是工具聚合目录；换机器没有这个根就直接跳过。
+        if !Path::new(r"D:\Ai-Files\Tools\Exe").is_dir() { return; }
+        let found = search_exe();
+        assert!(found.is_some(), "受限遍历应该能在工具目录里找到 {EXE_NAME}");
+        let path = found.unwrap();
+        assert_eq!(path.file_name().and_then(|v| v.to_str()).unwrap().to_ascii_lowercase(), EXE_NAME);
+        assert!(path.is_file());
     }
 
     #[test]

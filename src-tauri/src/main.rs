@@ -124,6 +124,8 @@ fn main() {
             dedup::dedup_waveform,
             dedup::dedup_play,
             dedup::dedup_open_workbench,
+            dedup::dedup_locate,
+            dedup::dedup_remember_exe,
             folder_picker::settings_pick_folder,
             catalog::catalog_set_favorite,
             catalog::catalog_set_favorite_group,

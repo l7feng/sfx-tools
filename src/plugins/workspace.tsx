@@ -71,6 +71,14 @@ export function PluginWorkspace({open,onClose,flags,native}:{open:boolean;onClos
   if(open&&!node.open)node.showModal();else if(!open&&node.open)node.close();
  },[open]);
  useEffect(()=>{if(open)setError('');},[open]);
+ // 首次打开且没记住路径时，自动找一次去重程序；失败就保持手动选择，不打扰用户。
+ useEffect(()=>{
+  if(!open||!native||dedupExe)return;
+  void (async()=>{
+   try{const found=await invoke<DedupProbe>('dedup_locate');setDedupExe(found.path);setProbe(found);}
+   catch{/* 没找到：留给「自动查找」按钮与手动选择 */}
+  })();
+ },[open,native]);
 
  async function run_(work:()=>Promise<void>){if(busy)return;setBusy(true);setError('');try{await work();}catch(e){setError(String(e));}finally{setBusy(false);} }
 
@@ -84,7 +92,11 @@ export function PluginWorkspace({open,onClose,flags,native}:{open:boolean;onClos
  const pickDedupExe=()=>void run_(async()=>{const path=await invoke<string|null>('plugin_pick_file',{initial:dedupExe||null,title:'选择 Audio Dedup 程序'});if(path){setDedupExe(path);setProbe(null);try{localStorage.setItem('sound-workbench-dedup-exe',path);}catch{/* 存储不可用不影响本次使用 */}}});
  const pickDedupRoot=()=>void run_(async()=>{const path=await invoke<string|null>('catalog_pick_folder',{initial:dedupRoot||null});if(path)setDedupRoot(path);});
  const pickDedupIndex=()=>void run_(async()=>{const path=await invoke<string|null>('catalog_pick_folder',{initial:dedupIndex||null});if(path)setDedupIndex(path);});
- const dedupProbe=()=>void run_(async()=>{setProbe(await invoke<DedupProbe>('dedup_probe',{exe:dedupExe}));});
+ const dedupProbe=()=>void run_(async()=>{
+  const found=await invoke<DedupProbe>('dedup_probe',{exe:dedupExe});
+  setProbe(found);
+  try{await invoke('dedup_remember_exe',{path:found.path});}catch{/* 记不住路径不影响本次使用 */}
+ });
  const dedupRunIt=(mode:string)=>void run_(async()=>{
   setDedupMode(mode);
   const out=await invoke<DedupRun>('dedup_run',{exe:dedupExe,root:dedupRoot||'',workdir:dedupIndex||null,mode});
@@ -94,8 +106,19 @@ export function PluginWorkspace({open,onClose,flags,native}:{open:boolean;onClos
  });
  const readDedup=()=>void run_(async()=>{setSummary(await invoke<DedupSummary>('dedup_groups',{workdir:dedupIndex||null}));});
  // 打开「重复组工作台」独立窗口：不设 parent，可拖到主窗口之外；同组再次点击只聚焦并切换选中项。
+ // group 传空时由工作台自己选第一组，这样「还没读过分组」也能一键开窗。
  const openWorkbench=(groupId:string)=>void run_(async()=>{
-  await invoke('dedup_open_workbench',{workdir:summary?.workdir||dedupIndex||'',group:groupId,exe:dedupExe||null});
+  let current=summary;
+  if(!current)current=await invoke<DedupSummary>('dedup_groups',{workdir:dedupIndex||null});
+  if(!current)throw new Error('还没有分组结果：先运行一次扫描。');
+  setSummary(current);
+  await invoke('dedup_open_workbench',{workdir:current.workdir||dedupIndex||'',group:groupId||current.groups[0]?.id||'',exe:dedupExe||null});
+ });
+ // 自动定位去重程序：先读上次记录，再按有界目录遍历；不再要求用户手找 exe。
+ const locateDedup=()=>void run_(async()=>{
+  const found=await invoke<DedupProbe>('dedup_locate');
+  setDedupExe(found.path);setProbe(found);
+  try{localStorage.setItem('sound-workbench-dedup-exe',found.path);}catch{/* 存储不可用不影响本次使用 */}
  });
 
  const meta=active==='dedup'?null:PLUGIN_META.find(item=>item.id===active)!;
@@ -142,7 +165,7 @@ export function PluginWorkspace({open,onClose,flags,native}:{open:boolean;onClos
     </>}
 
     {active==='dedup'&&<>
-     <div className="pw-row"><button className="pw-primary" disabled={busy||!native} onClick={pickDedupExe}>选择去重程序…</button><button disabled={busy||!native||!dedupExe} onClick={dedupProbe}>检测</button><span className="pw-path" title={dedupExe}>{dedupExe?displayPath(dedupExe):'未选择 audio-dedup-gui.exe'}</span></div>
+     <div className="pw-row"><button className="pw-primary" disabled={busy||!native} onClick={pickDedupExe}>选择去重程序…</button><button disabled={busy||!native} onClick={locateDedup}>自动查找</button><button disabled={busy||!native||!dedupExe} onClick={dedupProbe}>检测</button><span className="pw-path" title={dedupExe}>{dedupExe?displayPath(dedupExe):'未选择 audio-dedup-gui.exe（点「自动查找」可省去手动找路径）'}</span></div>
      {probe&&<div className="pw-row"><span className="pw-hint">命令行契约可用 · 版本 {probe.version}</span></div>}
      <div className="pw-row"><button disabled={busy||!native} onClick={pickDedupRoot}>选择扫描根…</button><span className="pw-path" title={dedupRoot}>{dedupRoot?displayPath(dedupRoot):'未选择（扫描必填）'}</span></div>
      <div className="pw-row"><button disabled={busy||!native} onClick={pickDedupIndex}>选择索引目录…</button><span className="pw-path" title={dedupIndex}>{dedupIndex?displayPath(dedupIndex):'留空则用默认 %APPDATA%\\sfx-tools\\dedup'}</span></div>
@@ -152,6 +175,7 @@ export function PluginWorkspace({open,onClose,flags,native}:{open:boolean;onClos
       <button disabled={busy||!native||!dedupExe} onClick={()=>dedupRunIt('l3')}>L3 感知疑似</button>
       <button disabled={busy||!native||!dedupExe} onClick={()=>dedupRunIt('report')}>重写报告</button>
       <button disabled={busy||!native} onClick={readDedup}>读取分组</button>
+      <button className="pw-primary" disabled={busy||!native} onClick={()=>openWorkbench('')}>打开工作台…</button>
       <span className="pw-hint">{busy?`正在跑 ${dedupMode}…（大库可能要几分钟）`:'扫描过程中界面会等待，可切到别的模块做别的事'}</span>
      </div>
      {summary&&<DedupSummaryCard summary={summary} onOpen={openWorkbench}/>}
