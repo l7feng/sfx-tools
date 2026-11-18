@@ -4,6 +4,7 @@
 
 | 日期 | 提交 | 说明 |
 | --- | --- | --- |
+| 2026-11-18 | `d59fee1` | 0.1.42 名称对齐：外部程序由「UCS 批量命名」改为 `UCS Namer`（与发行包 `UCS Namer.exe` 同名），管理 › 扩展卡片、左栏、首次配置向导、图标注释一并同步；搜索关键词保留「批量 / 命名」，用旧说法仍能搜到 |
 | 2026-11-18 | `5e8ca41` | 0.1.41 三个外部程序统一接入：MUS Prompt、UCS 批量命名从「外链」改为 `kind='app'`（本机外部程序），与 Audio Dedup 同排管理 › 扩展；新增 Rust `extapp`（`extapp_locate`/`extapp_remember`/`extapp_launch`，按文件名有界遍历，跳过 archive/归档/重建前/backup 目录，读文件版本）；管理页卡片显示路径（Audio Dedup 另显契约版本）；首次启动弹「先配一次，之后一键就用」向导（自动查找 + 逐项选择 + 完成/稍后，标记 `sound-workbench-extapp-setup-v1`），管理头部加「扩展配置」可随时重开；启动锁被占时不再静默退出，改为明确弹窗 |
 | 2026-11-18 | `3758327` | 0.1.40 去重入口收进「管理」页：Audio Dedup 以 `kind='app'` 的新类型排到 MUS Prompt 右侧，状态标签「外部程序」、按钮「打开 ↗」，卡片副文本显示 `v<版本> · <路径>`（开窗时调一次 `dedup_locate`），点击按「记录路径 → 自动定位 → 一次性手选并记住」启动 `dedup_launch_gui`；插件工作区第 4 项与「重复组工作台」整体移除（删 `dedup-workbench.*`、`dedup_open_workbench`/`dedup_waveform`/`dedup_play`、`DedupPathState` 白名单、`player.rs` 外部波形/试听、`SFX_DEDUP_WORKBENCH` 钩子），净减 607 行 |
 | 2026-11-18 | `a9bcef9` | 0.1.39 去重入口可见性：①面板加「打开去重 GUI」按钮（`dedup_launch_gui`，校验 exe 后直接拉起它自己的界面，处置在那里做）；②插件工作区记住上次模块（localStorage `sound-workbench-plugin-last`），用过 Audio Dedup 的人下次打开直接落在第 4 项，不用每次翻；③`?plugin=1&pluginItem=dedup` 仅供本地预览脚本指定初始项，正常启动不带 |
