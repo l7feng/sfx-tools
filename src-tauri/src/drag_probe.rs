@@ -127,6 +127,16 @@ pub async fn catalog_drag_many(app:tauri::AppHandle,window:tauri::Window,catalog
     #[cfg(not(windows))] {let _=(app,window,paths);Err("素材拖出目前仅支持Windows。".into())}
 }
 
+/// 拖出「已处理结果」：路径由 audio_tools 的 resolve_output 校验（必须在缓存根、
+/// 文件名与 job 匹配、身份未变、原素材未变），因此这里不额外做路径白名单。
+#[tauri::command]
+pub async fn catalog_drag_processed(app:tauri::AppHandle,window:tauri::Window,tools:tauri::State<'_,crate::audio_tools::AudioToolsState>,job_id:String,index:usize)->Result<String,String>{
+    let tools=tools.inner().clone();
+    let path=tauri::async_runtime::spawn_blocking(move||tools.resolve_output(&job_id,index)).await.map_err(|e|e.to_string())??;
+    #[cfg(windows)] {windows::start(app,window,vec![path]).await}
+    #[cfg(not(windows))] {let _=(app,window,path);Err("素材拖出目前仅支持Windows。".into())}
+}
+
 #[cfg(test)]
 mod tests {
     use super::validated_sample;

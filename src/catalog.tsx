@@ -29,6 +29,8 @@ import {addToLayer} from './layer-tools';
 import {ToolsWindow} from './tools-window';
 import {AccountWindow} from './account-window';
 import {ErrorBoundary,installCrashHandlers} from './error-boundary';
+import {FavoriteChips,TagsIndex} from './saved-views';
+import {armedLabels,getArmed} from './audio-toolbar';
 import {notify,NoticeStack} from './notices';
 import {TaskChip,TaskDrawer} from './task-center';
 import type {ToolPage} from './tool-navigation';
@@ -56,7 +58,7 @@ function channelLabel(channels:number|null){return channels==null?'—':channels
 function shortName(name:string){return name.replace(/\.(wav|aif|aiff|flac|mp3|ogg|m4a|aac|wma)$/i,'');}
 function Catalog(){
  const appVersion=useAppVersion();
- const [pinsOpen,setPinsOpen]=useState(()=>{try{return localStorage.getItem('sound-workbench-pins-open-v1')!=='0';}catch{return true;}});
+ const [pinsOpen,setPinsOpen]=useState(()=>{try{return localStorage.getItem('sound-workbench-pins-open-v1')==='1';}catch{return false;}});
  useEffect(()=>{try{localStorage.setItem('sound-workbench-pins-open-v1',pinsOpen?'1':'0');}catch{/* 存储不可用不影响展开 */}},[pinsOpen]);
  const [shortcutsCompact,setShortcutsCompact]=useState(()=>{try{return localStorage.getItem('sound-workbench-sidebar-shortcuts-compact-v1')==='1';}catch{return false;}});
  useEffect(()=>{try{localStorage.setItem('sound-workbench-sidebar-shortcuts-compact-v1',shortcutsCompact?'1':'0');}catch{/* 存储不可用不影响图标模式 */}},[shortcutsCompact]);
@@ -80,6 +82,8 @@ function Catalog(){
  const [sidebarPanel,setSidebarPanel]=useState<SidebarPanel|null>(null);
  const [context,setContext]=useState<ContextTarget|null>(null),[overview,setOverview]=useState<LibraryOverview>({tags:[],pins:[],playlists:[],history_count:0,favorite_count:0,favorite_ungrouped:0,favorite_groups:[]});
  const [searchScope,setSearchScope]=useState<SearchScope>('global'),[tag,setTag]=useState<string|null>(null),[historyOnly,setHistoryOnly]=useState(false),[playlistId,setPlaylistId]=useState<string|null>(null);
+ /** 标签索引页（0.1.34）：true 时主区铺标签网格，点标签才切回列表视图。 */
+ const [tagIndex,setTagIndex]=useState(false);
  const [settingsOpen,setSettingsOpen]=useState(false),[managerOpen,setManagerOpen]=useState(false),[accountOpen,setAccountOpen]=useState(false),[activeTool,setActiveTool]=useState<ToolPage|null>(null);
  const [page,setPage]=useState<CatalogPage>({items:[],total:0}),[offset,setOffset]=useState(0),[loadedOffset,setLoadedOffset]=useState(0),[jobs,setJobs]=useState<ImportJob[]>([]);
  const [query,setQuery]=useState(''),[format,setFormat]=useState('全部格式'),[selected,setSelected]=useState<CatalogAsset|null>(null),[selection,setSelection]=useState<string[]>([]);
@@ -185,7 +189,7 @@ function Catalog(){
  async function validatePath(path:string){setRoot(displayPath(path));setConfirmedRoot('');const checked=await invoke<string>('catalog_preview',{root:path.trim().replace(/^"|"$/g,'')});setConfirmedRoot(checked);setHistory(await invoke<string[]>('catalog_history'));}
  const openImport=()=>{setImportLibrary(library);setRoot(displayPath(history[0]??''));setConfirmedRoot('');setError('');setOpen(true);};
  dropHandler.current=paths=>{if(!open&&document.querySelector('dialog[open]')){setStatus('请先完成或关闭当前对话框，再拖入文件夹');return;}if(lock.current){setStatus('当前操作未结束，请稍后再次拖入');return;}if(paths.length!==1){setError('请一次拖入一个素材文件夹。');return;}setImportLibrary(library);setOpen(true);void action(()=>validatePath(paths[0]));};
- const clearViews=()=>{setFavoritesOnly(false);setFavoriteGroup(null);setFavoriteUngrouped(false);setTag(null);setHistoryOnly(false);setPlaylistId(null);setDuration({min:null,max:null});setExtraTags([]);setOffset(0);setSelected(null);};
+ const clearViews=()=>{setFavoritesOnly(false);setFavoriteGroup(null);setFavoriteUngrouped(false);setTag(null);setHistoryOnly(false);setPlaylistId(null);setTagIndex(false);setDuration({min:null,max:null});setExtraTags([]);setOffset(0);setSelected(null);};
  const selectFolder=(path:string|null)=>{setFolder(path);setSearchScope('global');clearViews();};
  const showCollection=(kind:'favorites'|'tag'|'history'|'playlist',value:string|null=null)=>{clearViews();setFolder(null);setQuery('');setDebouncedQuery('');if(kind==='favorites')setFavoritesOnly(true);else if(kind==='tag')setTag(value);else if(kind==='history')setHistoryOnly(true);else setPlaylistId(value);};
  const contextChanged=(clearSelection=false)=>{treeStamp.current='';generation.current++;if(clearSelection){setSelected(null);setSelection([]);setFolder(null);}void refresh().catch(e=>setError(String(e)));};
@@ -212,6 +216,17 @@ function Catalog(){
   const ids=selection.includes(asset.id)?selection:[asset.id];
   // 图片#2：拖到 DAW 前停止本软件试听，避免与宿主同时占用输出设备。
   if(preferences.stopOnDragToDaw)void invoke('player_control',{action:'stop',value:null}).catch(()=>{});
+  // 音频工具激活态（0.1.34）：命中的素材已生成对应处理文件时，拖出的是处理后的 WAV；
+  // 未就绪（还在生成、或结果失效）就退回拖原文件，并说明原因，绝不错拖。
+  const armed=getArmed();
+  const armedHit=armed&&armed.jobId&&armed.assetId===asset.id&&ids.length===1?armed:null;
+  if(armedHit){
+   void invoke<string>('catalog_drag_processed',{jobId:armedHit.jobId,index:0}).then(message=>{if(alive.current)setStatus(`${armedLabels[armedHit.op]}结果 · ${message}`);}).catch(()=>{
+    if(alive.current)setStatus(`${armedLabels[armedHit.op]}结果未就绪，本次拖出为原文件`);
+    void invoke<string>('catalog_drag_many',{ids}).then(message=>{if(alive.current)setStatus(message);}).catch(e=>{if(alive.current)setError(String(e));});
+   }).finally(()=>{dragOutLock.current=false;dragOutGraceUntil.current=Date.now()+1500;dragOutActive.current=false;});
+   return;
+  }
   void invoke<string>('catalog_drag_many',{ids}).then(message=>{if(alive.current)setStatus(message);}).catch(e=>{if(alive.current)setError(String(e));}).finally(()=>{dragOutLock.current=false;dragOutGraceUntil.current=Date.now()+1500;dragOutActive.current=false;});
  };
  const sortState=safeSort(sort);
@@ -246,6 +261,8 @@ function Catalog(){
  /** 展开态 2×3 网格、浮动展开态图标网格、折叠态纯图标条共用同一套导航行为。 */
  const showAll=()=>{setSidebarPanel(null);selectFolder(null);setQuery('');setFormat('全部格式');};
  const showFavorites=()=>{setSidebarPanel(null);showCollection('favorites');};
+ /** 标签页（0.1.34）：先给索引，点某个标签才筛到列表；和历史页同一层次，不再是小弹窗。 */
+ const showTagsIndex=()=>{setSidebarPanel(null);clearViews();setFolder(null);setQuery('');setDebouncedQuery('');setTagIndex(true);};
  const showHistory=()=>{setSidebarPanel(null);showCollection('history');};
  const selectFavoriteGroup=(group:string|null,ungrouped:boolean)=>{setSidebarPanel(null);setFavoritesOnly(true);setFavoriteGroup(group);setFavoriteUngrouped(ungrouped);setOffset(0);};
  const toggleJobs=()=>{setSidebarPanel(null);setJobsOpen(value=>!value);};
@@ -287,9 +304,9 @@ function Catalog(){
         </div>
        </div>
        <nav className={`sidebar-shortcuts${shortcutsCompact?' is-compact':''}`} aria-label="素材导航">
-        <button className={favoritesOnly?'active':''} aria-expanded={sidebarPanel?.kind==='favorites'} aria-haspopup="dialog" title="收藏分组" onClick={event=>openKind('favorites',event)}><NavGlyph id="favorites"/><span className="shortcut-label">收藏</span></button>
-        <button className={historyOnly?'active':''} title={`试听历史 · ${overview.history_count}条`} onClick={showHistory}><NavGlyph id="history"/><span className="shortcut-label">历史</span></button>
-        <button className={tag?'active':''} aria-expanded={sidebarPanel?.kind==='tags'} aria-haspopup="dialog" title={`标签 · ${overview.tags.length}项`} onClick={event=>openKind('tags',event)}><NavGlyph id="tags"/><span className="shortcut-label">标签</span></button>
+        <button className={favoritesOnly?'active':''} aria-current={favoritesOnly?'page':undefined} title={`收藏 · ${overview.favorite_count}条`} aria-label={`打开收藏页，${overview.favorite_count}条`} onClick={showFavorites}><NavGlyph id="favorites"/></button>
+        <button className={historyOnly?'active':''} aria-current={historyOnly?'page':undefined} title={`试听历史 · ${overview.history_count}条`} aria-label={`打开试听历史页，${overview.history_count}条`} onClick={showHistory}><NavGlyph id="history"/></button>
+        <button className={tag||tagIndex?'active':''} aria-current={tag||tagIndex?'page':undefined} title={`标签 · ${overview.tags.length}项`} aria-label={`打开标签页，${overview.tags.length}项`} onClick={showTagsIndex}><NavGlyph id="tags"/></button>
        </nav>
        <div className="sidebar-label tree-label"><span>路径目录</span><button type="button" className="tree-all" title={`全部素材 · ${totalAssets}条`} onClick={showAll}>全部 {totalAssets}</button></div>
        <FolderTree nodes={folders} selected={folder} onContext={(path,event)=>setContext({x:event.clientX,y:event.clientY,folder:path})} onSelect={selectFolder}/>
@@ -301,8 +318,10 @@ function Catalog(){
      </>}
    </SidebarDockFrame>
    <main className="browser">
-     <div className="library-strip"><div><h1>{favoritesOnly?(favoriteUngrouped?'收藏 · 未分组':favoriteGroup?`收藏 · ${favoriteGroup}`:'收藏'):historyOnly?'试听历史':tag?`标签 · ${tag}`:playlistId?overview.playlists.find(item=>item.id===playlistId)?.name??'播放列表':debouncedQuery&&searchScope==='global'?'全局搜索':folderInfo?.name??pageNames[library]}</h1><span>{page.total} 条</span>{hideUnavailable&&<span className="hide-unavailable-badge" title="当前列表已排除文件缺失、不可访问、已变化和读取失败的素材">仅显示可用素材</span>}{folder&&<button title={displayPath(folder)} onClick={()=>selectFolder(null)}>返回全部位置</button>}</div><div className="library-filters"><select aria-label="格式筛选" value={format} onChange={event=>{setFormat(event.target.value);setOffset(0);}}>{['全部格式','WAV','AIFF','FLAC','MP3','M4A'].map(item=><option key={item}>{item}</option>)}</select><select aria-label="排序方式" value={safeSort(sort).field} onChange={event=>{setSort(event.target.value);setOffset(0);}}><option value="name">名称排序</option><option value="duration">时长排序</option><option value="rate">采样率排序</option></select><button title="刷新当前素材列表" disabled={!native||busy} onClick={()=>void action(refresh)}>刷新</button></div></div>
-     {library==='music'&&<MusicFilters native={native} selected={selected} tags={overview.tags} filter={tag} filters={extraTags} duration={duration} templates={preferences.filterTemplates} onFilter={value=>{setTag(value);setOffset(0);}} onFilters={value=>{setExtraTags(value);setOffset(0);}} onDuration={value=>{setDuration(value);setOffset(0);}} onChanged={contextChanged}/>}<div className="selection-tools"><button disabled={selectedIds.length!==1} onClick={()=>openTool('ucs')}>UCS建议</button><button disabled={!selectedIds.length} aria-haspopup="dialog" title="把所选素材放入收藏分组；设分组会同时加入收藏" onClick={event=>{const rect=event.currentTarget.getBoundingClientRect();setGroupMenu({x:rect.right,y:rect.bottom,ids:selectedIds});}}>收藏分组</button><button disabled={!selectedIds.length} onClick={()=>openTool('convert')}>导出 / 转换</button><button className={`hide-unavailable${hideUnavailable?' is-on':''}`} aria-pressed={hideUnavailable} title="开启后与搜索关键词、格式、收藏等条件一起生效，只列出状态为可用的素材" onClick={()=>{setHideUnavailable(value=>!value);setOffset(0);}}>{hideUnavailable?'显示不可用素材':'隐藏不可用素材'}</button><CatalogTools selected={selected} ids={selectedIds} native={native} busy={busy} action={action} refresh={refresh} notify={setStatus} onRelocated={()=>{treeStamp.current='';setSelected(null);setSelection([]);setFolder(null);setOffset(0);}}/><button disabled={!native||busy||!selectedIds.length} onClick={()=>void assignOther()}>加入{pageNames[library==='sound'?'music':'sound']}</button></div>
+     <div className="library-strip"><div><h1>{tagIndex?'标签':favoritesOnly?(favoriteUngrouped?'收藏 · 未分组':favoriteGroup?`收藏 · ${favoriteGroup}`:'收藏'):historyOnly?'试听历史':tag?`标签 · ${tag}`:playlistId?overview.playlists.find(item=>item.id===playlistId)?.name??'播放列表':debouncedQuery&&searchScope==='global'?'全局搜索':folderInfo?.name??pageNames[library]}</h1><span>{tagIndex?`${overview.tags.length} 个标签`:`${page.total} 条`}</span>{hideUnavailable&&!tagIndex&&<span className="hide-unavailable-badge" title="当前列表已排除文件缺失、不可访问、已变化和读取失败的素材">仅显示可用素材</span>}{folder&&<button title={displayPath(folder)} onClick={()=>selectFolder(null)}>返回全部位置</button>}</div><div className="library-filters"><select aria-label="格式筛选" value={format} onChange={event=>{setFormat(event.target.value);setOffset(0);}}>{['全部格式','WAV','AIFF','FLAC','MP3','M4A'].map(item=><option key={item}>{item}</option>)}</select><select aria-label="排序方式" value={safeSort(sort).field} onChange={event=>{setSort(event.target.value);setOffset(0);}}><option value="name">名称排序</option><option value="duration">时长排序</option><option value="rate">采样率排序</option></select><button title="刷新当前素材列表" disabled={!native||busy} onClick={()=>void action(refresh)}>刷新</button></div></div>
+     {tagIndex&&<TagsIndex tags={overview.tags} active={null} busy={busy} onPick={name=>{if(!name)return;setTagIndex(false);setTag(name);setOffset(0);setSelected(null);}}/>}
+     {favoritesOnly&&<FavoriteChips groups={overview.favorite_groups} active={favoriteGroup} ungrouped={favoriteUngrouped} onPick={selectFavoriteGroup}/>}
+     {library==='music'&&<MusicFilters native={native} selected={selected} tags={overview.tags} filter={tag} filters={extraTags} duration={duration} templates={preferences.filterTemplates} onFilter={value=>{setTag(value);setTagIndex(false);setOffset(0);}} onFilters={value=>{setExtraTags(value);setOffset(0);}} onDuration={value=>{setDuration(value);setOffset(0);}} onChanged={contextChanged}/>}{!tagIndex&&<><div className="selection-tools"><button disabled={selectedIds.length!==1} onClick={()=>openTool('ucs')}>UCS建议</button><button disabled={!selectedIds.length} aria-haspopup="dialog" title="把所选素材放入收藏分组；设分组会同时加入收藏" onClick={event=>{const rect=event.currentTarget.getBoundingClientRect();setGroupMenu({x:rect.right,y:rect.bottom,ids:selectedIds});}}>收藏分组</button><button disabled={!selectedIds.length} onClick={()=>openTool('convert')}>导出 / 转换</button><button className={`hide-unavailable${hideUnavailable?' is-on':''}`} aria-pressed={hideUnavailable} title="开启后与搜索关键词、格式、收藏等条件一起生效，只列出状态为可用的素材" onClick={()=>{setHideUnavailable(value=>!value);setOffset(0);}}>{hideUnavailable?'显示不可用素材':'隐藏不可用素材'}</button><CatalogTools selected={selected} ids={selectedIds} native={native} busy={busy} action={action} refresh={refresh} notify={setStatus} onRelocated={()=>{treeStamp.current='';setSelected(null);setSelection([]);setFolder(null);setOffset(0);}}/><button disabled={!native||busy||!selectedIds.length} onClick={()=>void assignOther()}>加入{pageNames[library==='sound'?'music':'sound']}</button></div>
      <div ref={list} onKeyDown={keyNavigate} className="asset-scroll" tabIndex={0} role="region" aria-label={`${pageNames[library]}素材列表`} aria-busy={pageLoading}>
       <table style={{tableLayout:'fixed',minWidth:shownColumns.reduce((sum,column)=>sum+layout.columns[column.widthIndex],0)}}>
        <colgroup>{shownColumns.map(column=><col key={column.id} style={{width:layout.columns[column.widthIndex]}}/>)}</colgroup>
@@ -318,7 +337,7 @@ function Catalog(){
        </thead>
        <tbody>{rows.map((asset,rowIndex)=><tr id={`asset-${asset.id}`} key={asset.id} onContextMenu={event=>contextAssets(asset,event)} draggable={false} onDragStart={event=>event.preventDefault()} onPointerDown={event=>{if(native&&event.isPrimary&&event.button===0)dragOrigin.current={id:asset.id,x:event.clientX,y:event.clientY,pointer:event.pointerId};}} onPointerMove={event=>dragMove(event,asset)} onPointerUp={()=>{dragOrigin.current=null;}} onPointerCancel={()=>{dragOrigin.current=null;}} onPointerLeave={()=>{dragOrigin.current=null;}} aria-selected={selection.includes(asset.id)} onClick={event=>choose(asset,event)}>{shownColumns.map(column=><td key={column.id} className={column.id==='wave'?'waveform-cell':['duration','rate','bpm','channels','index'].includes(column.id)?'mono':['favorite','playlist'].includes(column.id)?'is-narrow':''}>{renderCell(column.id,asset,rowIndex)}</td>)}</tr>)}</tbody>
       </table>{!rows.length&&<div className="empty-state"><h2>{pageLoading?'正在读取素材…':query||format!=='全部格式'||favoritesOnly||tag||historyOnly||playlistId||extraTags.length||duration.min!==null||duration.max!==null?'没有匹配素材':`添加你的${library==='music'?'音乐':'音效'}素材`}</h2><p>{favoritesOnly||tag||historyOnly||playlistId||extraTags.length||duration.min!==null||duration.max!==null?'当前筛选下没有素材，可切换视图或清除筛选。':library==='music'?'可添加音乐文件夹，或从音效库把已选素材加入音乐库。':'选择文件夹后，只读扫描WAV、AIFF、FLAC、MP3、M4A。'}</p><button disabled={!native||busy||running} onClick={openImport}>添加素材文件夹</button></div>}</div>
-     <div className="list-footer"><span>{rows.length} 条可见 / 共 {page.total} 条</span><div className="pager"><button aria-label="上一页" disabled={offset===0||busy||pageLoading} onClick={()=>{setOffset(Math.max(0,offset-PAGE_SIZE));setSelected(null);}}>‹</button><span>{Math.floor(loadedOffset/PAGE_SIZE)+1} / {Math.max(1,Math.ceil(page.total/PAGE_SIZE))}</span><button aria-label="下一页" disabled={offset+PAGE_SIZE>=page.total||busy||pageLoading} onClick={()=>{setOffset(offset+PAGE_SIZE);setSelected(null);}}>›</button></div></div>
+     <div className="list-footer"><span>{rows.length} 条可见 / 共 {page.total} 条</span><div className="pager"><button aria-label="上一页" disabled={offset===0||busy||pageLoading} onClick={()=>{setOffset(Math.max(0,offset-PAGE_SIZE));setSelected(null);}}>‹</button><span>{Math.floor(loadedOffset/PAGE_SIZE)+1} / {Math.max(1,Math.ceil(page.total/PAGE_SIZE))}</span><button aria-label="下一页" disabled={offset+PAGE_SIZE>=page.total||busy||pageLoading} onClick={()=>{setOffset(offset+PAGE_SIZE);setSelected(null);}}>›</button></div></div></>}
    </main>
    {layout.details?<><ResizeHandle label="详情宽度" value={layout.inspector} reverse onChange={value=>resize('inspector',value)}/><aside className="inspector">{selected?<AssetDetail key={selected.id} asset={selected} library={library} groups={overview.favorite_groups.map(item=>item.name)} onCollapse={()=>toggle('details')} onChanged={patch=>{setSelected(old=>old?.id===selected.id?{...old,...patch}:old);void action(refresh);}}/>:<div className="inspector-empty"><div className="panel-heading"><span>素材详情</span><button onClick={()=>toggle('details')} aria-label="折叠右侧详情栏">›</button></div><div className="panel-empty-state"><span className="panel-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M3 12h2m3-5v10m4-14v18m4-13v8m4-5v2"/></svg></span><strong>未选择素材</strong><p>在列表中点选一条素材，这里会显示文件信息、收藏与分组、标签。</p></div></div>}</aside></>:<aside className="panel-rail right-rail"><button onClick={()=>toggle('details')} aria-label="展开右侧详情栏">‹</button><span>详情</span></aside>}
   </div>

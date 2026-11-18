@@ -84,6 +84,7 @@ fn main() {
             drag_probe::drag_sample,
             drag_probe::catalog_drag_out,
             drag_probe::catalog_drag_many,
+            drag_probe::catalog_drag_processed,
             catalog::catalog_preview,
             catalog::catalog_list,
             catalog::catalog_recent,

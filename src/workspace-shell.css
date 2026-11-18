@@ -126,8 +126,10 @@
 .row-favorite.is-on:hover{color:#e5484d;border-color:var(--danger-line,var(--line))}
 .row-favorite:not(.is-on):hover{color:#e5484d}
 .selection-tools>button.hide-unavailable{font-size:11px;min-height:28px;padding:0 9px}
-.selection-tools>button.hide-unavailable.is-on{color:var(--danger,#e5484d);border-color:var(--danger-line,var(--line));background:var(--danger-wash,var(--raised))}
-.library-strip>div>span.hide-unavailable-badge{font:10px var(--mono);color:var(--danger,#e5484d);border:1px solid var(--danger-line,var(--line));border-radius:3px;padding:1px 5px;white-space:nowrap}
+/* 0.1.34：激活态改成和「跨语言 / 含元数据」同一套 accent 配色，不再用 danger 红。
+   红色在这条工具条上只留给真正的危险操作（移除、删除），状态开关用蓝。 */
+.selection-tools>button.hide-unavailable.is-on{color:var(--accent);border-color:var(--accent-line);background:var(--accent-wash)}
+.library-strip>div>span.hide-unavailable-badge{font:10px var(--mono);color:var(--accent);border:1px solid var(--accent-line);border-radius:3px;padding:1px 5px;white-space:nowrap}
 
 /* 0.1.20：搜索条跨语言开关、列表简化小波形单色单线、设置页新增面板。 */
 .top-search .search-toggle{flex:0 0 auto;min-height:22px;height:22px;padding:0 7px;border:1px solid var(--line);border-radius:3px;background:transparent;color:var(--muted);font-size:11px;white-space:nowrap}
@@ -238,3 +240,30 @@
 .workspace-v2 .transport .vol-icon{width:13px;height:13px;flex:0 0 13px;color:var(--muted)}
 .workspace-v2 .transport .volume input{width:72px}
 .workspace-v2 .transport .volume span:last-child{font-size:10px;color:var(--muted);min-width:26px;text-align:right}
+/* 2026-11-18 音频工具激活态：激活的按钮用 accent 实底，和未激活的灰底按钮一眼分清。 */
+.audio-toolbar button.is-armed{color:var(--accent);border-color:var(--accent-line);background:var(--accent-wash)}
+.audio-toolbar button.is-armed svg{color:var(--accent)}
+
+/* 2026-11-18 收藏页 / 标签页 / 纯图标快捷入口。
+   快捷入口改成图标按钮后，sidebar-dock 旧规则里有 display:none 的图标要覆盖回来，
+   否则只剩一块空按钮。三个按钮仍走 grid 三列，天然平均铺开。 */
+.workspace-v2 .sidebar-shortcuts .nav-glyph{display:block;width:14px;height:14px;margin:0 auto}
+.workspace-v2 .sidebar-shortcuts button{justify-content:center;gap:0}
+/* 收藏页顶部分组条 */
+.saved-chips{display:flex;flex-wrap:wrap;gap:4px;padding:6px 0 2px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.saved-chips .saved-chip{display:inline-flex;align-items:center;gap:5px;min-height:22px;height:22px;padding:0 9px;border:1px solid var(--line);border-radius:11px;background:transparent;color:var(--muted);font-size:11px;white-space:nowrap;cursor:pointer}
+.saved-chips .saved-chip:hover{color:var(--text);border-color:var(--line-strong)}
+.saved-chips .saved-chip.is-active{color:var(--accent);border-color:var(--accent-line);background:var(--accent-wash)}
+.saved-chips .saved-chip b{font:10px var(--mono);color:inherit;opacity:.75}
+/* 标签索引页 */
+.tag-index{padding:4px 2px 12px}
+.tag-index-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;font:10.5px var(--mono);color:var(--muted)}
+.tag-index-head .tag-index-clear{margin-left:auto;min-height:24px;padding:0 10px;border:1px solid var(--line);border-radius:3px;background:transparent;color:var(--muted);font-size:11px;cursor:pointer}
+.tag-index-head .tag-index-clear:hover{color:var(--text);border-color:var(--accent-line)}
+.tag-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:6px}
+.tag-card{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:34px;padding:0 11px;border:1px solid var(--line);border-radius:4px;background:var(--raised);color:var(--text);font-size:12px;text-align:left;cursor:pointer}
+.tag-card:hover{border-color:var(--accent-line);background:color-mix(in srgb,var(--accent) 8%,var(--raised))}
+.tag-card.is-active{border-color:var(--accent-line);background:var(--accent-wash);color:var(--accent)}
+.tag-card-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag-card-count{font:10.5px var(--mono);color:var(--muted);flex:0 0 auto}
+.tag-index.is-empty .tag-index-empty{margin:0;padding:26px 8px;font-size:12px;line-height:1.8;color:var(--muted)}
