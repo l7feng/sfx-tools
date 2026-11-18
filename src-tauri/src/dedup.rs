@@ -12,7 +12,6 @@
 //!   报告  `... --cli report --workdir <索引目录>`
 
 use serde::Serialize;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -233,6 +232,152 @@ pub fn dedup_groups(workdir: Option<String>) -> Result<DedupSummary, String> {
     })
 }
 
+// ---------- 重复组工作台：按绝对路径的只读通道 ----------
+//
+// 波形与试听原本只收素材库 id；去重结果里的文件是库外绝对路径，因此这里补两条只读命令。
+// 硬约束：路径必须在 `groups.json` 的 files 里出现过（白名单按 (workdir, groups.json 长度+时间戳) 缓存），
+// 且必须是存在的普通文件；不接受界面上随便传路径，也不提供任何写入。
+
+pub struct DedupPathState {
+    cache: std::sync::Arc<std::sync::Mutex<Option<AllowCache>>>,
+}
+
+struct AllowCache {
+    workdir: PathBuf,
+    stamp: (u64, u128),
+    allow: std::collections::HashSet<String>,
+}
+
+impl Default for DedupPathState {
+    fn default() -> Self {
+        Self { cache: std::sync::Arc::new(std::sync::Mutex::new(None)) }
+    }
+}
+
+fn norm_path(value: &str) -> String {
+    value.trim().trim_matches('"').replace('/', "\\").to_lowercase()
+}
+
+fn groups_stamp(file: &Path) -> Result<(u64, u128), String> {
+    let meta = std::fs::metadata(file).map_err(|_| "还没有分组结果：先运行一次扫描。".to_string())?;
+    if !meta.is_file() { return Err("分组结果不是文件。".into()); }
+    if meta.len() > MAX_JSON_BYTES { return Err("分组结果过大（>40MB），请直接用去重工具自己的界面查看。".into()); }
+    let ns = meta.modified().ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos()).unwrap_or(0);
+    Ok((meta.len(), ns))
+}
+
+fn build_allow(file: &Path) -> Result<std::collections::HashSet<String>, String> {
+    let raw = std::fs::read_to_string(file).map_err(|e| format!("读取分组结果失败：{e}"))?;
+    let doc: serde_json::Value = serde_json::from_str(&raw).map_err(|e| format!("分组结果不是有效 JSON：{e}"))?;
+    let mut allow = std::collections::HashSet::new();
+    if let Some(groups) = doc.get("groups").and_then(|v| v.as_array()) {
+        for group in groups {
+            if let Some(files) = group.get("files").and_then(|v| v.as_array()) {
+                for file in files {
+                    if let Some(path) = file.get("path").and_then(|v| v.as_str()) {
+                        if !path.trim().is_empty() { allow.insert(norm_path(path)); }
+                    }
+                }
+            }
+        }
+    }
+    Ok(allow)
+}
+
+/// 校验一个路径确实是本次分组结果里的成员；返回可打开的实体路径。
+fn check_member(workdir: &Path, raw: &str, cache: &std::sync::Arc<std::sync::Mutex<Option<AllowCache>>>) -> Result<PathBuf, String> {
+    if raw.trim().is_empty() { return Err("文件路径为空。".into()); }
+    let candidate = PathBuf::from(raw.trim().trim_matches('"'));
+    if !candidate.is_absolute() { return Err("只接受绝对路径。".into()); }
+    let file = workdir.join("groups.json");
+    let stamp = groups_stamp(&file)?;
+    let mut guard = cache.lock().map_err(|_| "路径白名单状态不可用".to_string())?;
+    let allow = match guard.as_ref() {
+        Some(cache) if cache.workdir == workdir && cache.stamp == stamp => cache.allow.clone(),
+        _ => {
+            let allow = build_allow(&file)?;
+            *guard = Some(AllowCache { workdir: workdir.to_path_buf(), stamp, allow: allow.clone() });
+            allow
+        }
+    };
+    if !allow.contains(&norm_path(raw)) {
+        return Err("该文件不在当前 groups.json 的分组里，无法读取。".into());
+    }
+    let meta = std::fs::symlink_metadata(&candidate).map_err(|e| format!("文件不可访问：{e}"))?;
+    if !meta.is_file() { return Err("目标不是普通文件。".into()); }
+    // 目录联接/符号链接一律拒绝，避免白名单校验被链接绕过。
+    for part in candidate.ancestors() {
+        if let Ok(meta) = std::fs::symlink_metadata(part) {
+            #[cfg(windows)]
+            { use std::os::windows::fs::MetadataExt; if meta.file_attributes() & 0x400 != 0 { return Err("不接受链接或目录联接。".into()); } }
+            #[cfg(not(windows))]
+            if meta.file_type().is_symlink() { return Err("不接受符号链接。".into()); }
+        }
+    }
+    Ok(candidate)
+}
+
+fn resolve_workdir(workdir: &str) -> Result<PathBuf, String> {
+    let trimmed = workdir.trim().trim_matches('"');
+    if trimmed.is_empty() { return Ok(default_workdir()); }
+    check_dir(trimmed, "索引目录")
+}
+
+/// 只读波形：外部绝对路径 → 峰值包络（走现有解码与缓存管线）。
+#[tauri::command]
+pub async fn dedup_waveform(workdir: String, path: String, simple: Option<bool>, state: tauri::State<'_, DedupPathState>)
+    -> Result<crate::player::Waveform, String> {
+    let wd = resolve_workdir(&workdir)?;
+    let cache = state.cache.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let file = check_member(&wd, &path, &cache)?;
+        let simple = simple.unwrap_or(false);
+        let cache = crate::settings_ops::cache_enabled().then(|| crate::settings_ops::wave_dir(simple));
+        crate::player::waveform_path(&file, cache.as_deref(), simple)
+    }).await.map_err(|e| e.to_string())?
+}
+
+/// 只读试听：外部绝对路径 → 交给单声卡播放线程，不写素材试听历史。
+#[tauri::command]
+pub async fn dedup_play(workdir: String, path: String, position: Option<f64>, state: tauri::State<'_, DedupPathState>, player: tauri::State<'_, crate::player::PlayerState>)
+    -> Result<crate::player::PlayerSnapshot, String> {
+    let wd = resolve_workdir(&workdir)?;
+    let player = player.inner().clone();
+    let cache = state.cache.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let file = check_member(&wd, &path, &cache)?;
+        let id = format!("dedup:{}", norm_path(&file.to_string_lossy()));
+        crate::player::load_external(&player, id, file, position.unwrap_or(0.0))
+    }).await.map_err(|e| e.to_string())?
+}
+
+/// 打开「重复组工作台」独立窗口：顶级窗口（不设 parent），可拖到主窗口之外、可缩放。
+/// 参数经初始化脚本注入，避免 URL 编码差异；同一时刻只存在一个工作台窗口。
+#[tauri::command]
+pub fn dedup_open_workbench(app: tauri::AppHandle, workdir: String, group: String, exe: Option<String>) -> Result<(), String> {
+    use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+    let wd = resolve_workdir(&workdir)?;
+    let label = "dedup-workbench";
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.set_focus();
+        let _ = window.unminimize();
+        let _ = window.emit("dedup-workbench-select", serde_json::json!({ "workdir": wd, "group": group }));
+        return Ok(());
+    }
+    let args = serde_json::json!({ "workdir": wd, "group": group, "exe": exe.unwrap_or_default() });
+    let script = format!("window.__DEDUP_ARG = {};", serde_json::to_string(&args).map_err(|e| e.to_string())?);
+    WebviewWindowBuilder::new(&app, label, WebviewUrl::App("index.html".into()))
+        .title("重复组工作台 · SFX TOOLS")
+        .inner_size(1180.0, 520.0)
+        .min_inner_size(900.0, 380.0)
+        .initialization_script(&script)
+        .build()
+        .map_err(|e| format!("无法打开工作台窗口：{e}"))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,6 +402,32 @@ mod tests {
         std::fs::create_dir_all(&temp).unwrap();
         let err = dedup_groups(Some(temp.to_string_lossy().to_string())).unwrap_err();
         assert!(err.contains("还没有分组结果"));
+        std::fs::remove_dir_all(&temp).ok();
+    }
+
+    #[test]
+    fn member_paths_must_appear_in_groups_json() {
+        let temp = std::env::temp_dir().join(format!("sfx-dedup-member-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp).unwrap();
+        let inner = temp.join("a.wav");
+        std::fs::write(&inner, b"x").unwrap();
+        let outside = temp.join("outside.wav");
+        std::fs::write(&outside, b"x").unwrap();
+        // 用 serde 序列化，避免手写转义把 Windows 反斜杠写坏。
+        let body = serde_json::json!({
+            "schema": 1,
+            "groups": [{
+                "id": "L1-1", "layer": "L1", "grade": "确定", "count": 1,
+                "keep": inner.to_string_lossy(),
+                "reclaimable_bytes": 0,
+                "files": [{ "path": inner.to_string_lossy(), "size": 1, "keep": true }]
+            }]
+        });
+        std::fs::write(temp.join("groups.json"), serde_json::to_vec(&body).unwrap()).unwrap();
+        let cache = std::sync::Arc::new(std::sync::Mutex::new(None));
+        assert!(check_member(&temp, &inner.to_string_lossy(), &cache).is_ok());
+        // 不在 groups.json 里的路径一律拒绝：界面无法借这条通道读任意文件。
+        assert!(check_member(&temp, &outside.to_string_lossy(), &cache).is_err());
         std::fs::remove_dir_all(&temp).ok();
     }
 

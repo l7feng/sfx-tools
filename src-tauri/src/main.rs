@@ -73,6 +73,14 @@ fn main() {
             app.manage(workbench_jobs::WorkbenchJobsState::new(cache.join("library-maintenance-v1")));
             app.manage(semantic::SemanticState::new(data.join("semantic")));
             app.manage(settings_ops::SettingsState::new(cache, data.clone(), data.join("catalog.sqlite")));
+    app.manage(dedup::DedupPathState::default());
+    // 验收钩子：SFX_DEDUP_WORKBENCH="<索引目录>|<组ID>" 时启动即打开工作台窗口，便于自动化核对；不影响正常运行。
+    if let Ok(spec)=std::env::var("SFX_DEDUP_WORKBENCH") {
+        if let Some((wd,group))=spec.split_once('|') {
+            let handle=app.handle().clone();
+            let _=dedup::dedup_open_workbench(handle,wd.to_string(),group.to_string(),None);
+        }
+    }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -113,6 +121,9 @@ fn main() {
             dedup::dedup_probe,
             dedup::dedup_run,
             dedup::dedup_groups,
+            dedup::dedup_waveform,
+            dedup::dedup_play,
+            dedup::dedup_open_workbench,
             folder_picker::settings_pick_folder,
             catalog::catalog_set_favorite,
             catalog::catalog_set_favorite_group,

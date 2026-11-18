@@ -55,7 +55,17 @@
 .plugin-workspace .dedup-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 9px}
 .plugin-workspace .dedup-chips span{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:1px 7px}
 .plugin-workspace .dedup-chips b{color:var(--text);font-weight:500;margin-left:2px}
+.plugin-workspace .dedup-table tr.is-clickable{cursor:pointer}
+.plugin-workspace .dedup-table tr.is-clickable:hover td{background:#182430}
 .plugin-workspace .dedup-table{width:100%;border-collapse:collapse;font-size:11px}
-.plugin-workspace .dedup-table th,.plugin-workspace .dedup-table td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.plugin-workspace .dedup-table tr.is-clickable{cursor:pointer}
+.plugin-workspace .dedup-table tr.is-clickable:hover td{background:#182430}
+.plugin-workspace .dedup-table th,.plugin-workspace .dedup-table tr.is-clickable{cursor:pointer}
+.plugin-workspace .dedup-table tr.is-clickable:hover td{background:#182430}
+.plugin-workspace .dedup-table td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.plugin-workspace .dedup-table tr.is-clickable{cursor:pointer}
+.plugin-workspace .dedup-table tr.is-clickable:hover td{background:#182430}
 .plugin-workspace .dedup-table th{color:var(--muted);font-weight:400;font-size:10.5px}
+.plugin-workspace .dedup-table tr.is-clickable{cursor:pointer}
+.plugin-workspace .dedup-table tr.is-clickable:hover td{background:#182430}
 .plugin-workspace .dedup-table td:last-child{color:var(--accent)}

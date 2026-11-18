@@ -93,6 +93,10 @@ export function PluginWorkspace({open,onClose,flags,native}:{open:boolean;onClos
   try{setSummary(await invoke<DedupSummary>('dedup_groups',{workdir:out.workdir}));}catch{/* 扫描失败时可能没有 groups.json，错误已在 run 输出里 */}
  });
  const readDedup=()=>void run_(async()=>{setSummary(await invoke<DedupSummary>('dedup_groups',{workdir:dedupIndex||null}));});
+ // 打开「重复组工作台」独立窗口：不设 parent，可拖到主窗口之外；同组再次点击只聚焦并切换选中项。
+ const openWorkbench=(groupId:string)=>void run_(async()=>{
+  await invoke('dedup_open_workbench',{workdir:summary?.workdir||dedupIndex||'',group:groupId,exe:dedupExe||null});
+ });
 
  const meta=active==='dedup'?null:PLUGIN_META.find(item=>item.id===active)!;
  const enabled=active==='dedup'?true:flags[active as PluginId];
@@ -150,7 +154,7 @@ export function PluginWorkspace({open,onClose,flags,native}:{open:boolean;onClos
       <button disabled={busy||!native} onClick={readDedup}>读取分组</button>
       <span className="pw-hint">{busy?`正在跑 ${dedupMode}…（大库可能要几分钟）`:'扫描过程中界面会等待，可切到别的模块做别的事'}</span>
      </div>
-     {summary&&<DedupSummaryCard summary={summary}/>}
+     {summary&&<DedupSummaryCard summary={summary} onOpen={openWorkbench}/>}
      {run&&!run.ok&&<article className="pw-result is-fail" aria-label="去重运行输出">
       <header><strong>{run.mode} 退出码 {run.code??'?'}</strong><Evidence value="local_probe"/></header>
       {(run.stderr_tail||run.stdout_tail)&&<pre>{run.stderr_tail||run.stdout_tail}</pre>}
@@ -180,7 +184,7 @@ function ResultCard({title,result}:{title:string;result:PluginResult}){
  </article>;
 }
 
-function DedupSummaryCard({summary}:{summary:DedupSummary}){
+function DedupSummaryCard({summary,onOpen}:{summary:DedupSummary;onOpen:(id:string)=>void}){
  const shown=summary.groups.slice(0,40);
  return <article className="pw-result dedup-summary" aria-label="去重分组汇总">
   <header><strong>分组汇总</strong><code className="pw-code">{summary.generated_at||'—'}</code><Evidence value="local_probe"/></header>
@@ -195,11 +199,12 @@ function DedupSummaryCard({summary}:{summary:DedupSummary}){
   </div>
   {shown.length?<table className="dedup-table">
    <thead><tr><th>组</th><th>层级</th><th>等级</th><th>文件</th><th>可释放</th><th>建议保留</th></tr></thead>
-   <tbody>{shown.map(group=><tr key={group.id} title={group.keep}>
+   <tbody>{shown.map(group=><tr key={group.id} title={`${group.keep}\n点击打开重复组工作台（独立窗口）`} className="is-clickable" onClick={()=>onOpen(group.id)}>
     <td>{group.id}</td><td>{group.layer}</td><td>{group.grade}</td><td>{group.count}</td>
     <td>{formatBytes(group.reclaimable_bytes)}</td><td>{baseName(group.keep)}</td>
    </tr>)}</tbody>
   </table>:<p className="pw-hint">还没有重复组。</p>}
+  <p className="pw-hint">点任意一行打开「重复组工作台」独立窗口：分组浏览、文件表、最多 5 轨波形与试听，只读。</p>
   {(summary.truncated||summary.groups.length>40)&&<p className="pw-hint">只显示前 40 组{summary.groups.length>40?`（共 ${summary.groups.length} 组）`:''}；完整清单请看 groups.json 或去重工具界面。</p>}
   {summary.errors.length>0&&<ul>{summary.errors.slice(0,5).map((item,i)=><li key={i}>{item}</li>)}</ul>}
   <p className="pw-hint">根目录 {displayPath(summary.root)} · 索引 {displayPath(summary.workdir)}</p>
