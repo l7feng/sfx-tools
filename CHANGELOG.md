@@ -4,6 +4,7 @@
 
 | 日期 | 提交 | 说明 |
 | --- | --- | --- |
+| 2026-11-18 | `3758327` | 0.1.40 去重入口收进「管理」页：Audio Dedup 以 `kind='app'` 的新类型排到 MUS Prompt 右侧，状态标签「外部程序」、按钮「打开 ↗」，卡片副文本显示 `v<版本> · <路径>`（开窗时调一次 `dedup_locate`），点击按「记录路径 → 自动定位 → 一次性手选并记住」启动 `dedup_launch_gui`；插件工作区第 4 项与「重复组工作台」整体移除（删 `dedup-workbench.*`、`dedup_open_workbench`/`dedup_waveform`/`dedup_play`、`DedupPathState` 白名单、`player.rs` 外部波形/试听、`SFX_DEDUP_WORKBENCH` 钩子），净减 607 行 |
 | 2026-11-18 | `a9bcef9` | 0.1.39 去重入口可见性：①面板加「打开去重 GUI」按钮（`dedup_launch_gui`，校验 exe 后直接拉起它自己的界面，处置在那里做）；②插件工作区记住上次模块（localStorage `sound-workbench-plugin-last`），用过 Audio Dedup 的人下次打开直接落在第 4 项，不用每次翻；③`?plugin=1&pluginItem=dedup` 仅供本地预览脚本指定初始项，正常启动不带 |
 | 2026-11-18 | `9e1a98d` | 0.1.38 去重接入两个卡点：①分组表之外补显式「打开工作台…」按钮（还没读过分组也能一键开，空 group 由工作台自选首组）；②新增 `dedup_locate` 自动定位去重程序——先读 `%APPDATA%\sfx-tools\dedup\exe.txt`，再按**有界遍历**（只扫 `D:\Ai-Files\Tools\Exe`、`%LOCALAPPDATA%\Programs`、ProgramFiles 等少数根，深度≤4、节点≤4000、跳过链接与系统目录）找 `audio-dedup-gui.exe`，找到即验契约并记住；面板加「自动查找」按钮，首次打开自动试一次。附搜索单测 |
 | 2026-11-18 | `8e15e65` | 0.1.37 重复组工作台（独立窗口）：去重面板的分组表任点一行，打开 1180×520 的**顶级独立窗口**（不设 parent，可拖到主窗口之外、可缩放、任务栏独立）；左侧分层分组列表（搜索＋L1/L2/L3 过滤），右侧文件表（保留徽标/时长/大小/BER/目录）＋最多 5 轨真实峰值波形（共用播放头对齐）＋试听；新增只读通道 `dedup_waveform` / `dedup_play`，路径必须出现在 groups.json（按长度+时间戳缓存的缓存白名单）且拒绝链接与目录联接；仍无任何隔离/删除入口。主窗口销毁即整程退出，避免孤儿窗口 |
