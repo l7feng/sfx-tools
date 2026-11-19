@@ -297,7 +297,7 @@
 .workspace-v2 .folder-tree,
 .workspace-v2 .inspector,
 .workspace-v2 .selection-tools,
-.workspace-v2 .list-footer{scrollbar-gutter:stable both-edges}
+.workspace-v2 .list-footer{scrollbar-gutter:stable}
 .workspace-v2 .sidebar-shortcuts{height:32px;min-height:32px;max-height:32px;align-items:center}
 .workspace-v2 .sidebar-shortcuts>button{height:26px;min-height:26px;max-height:26px;line-height:26px}
 .workspace-v2 .sidebar-shortcuts .nav-glyph{display:inline-flex;align-items:center;justify-content:center;line-height:0}
@@ -315,9 +315,11 @@
 .workspace-commandbar .top-search .search-toggle{display:none}
 }
 
-/* 素材详情往中间收：标题、摘要、信息组统一 20px 横向内边距 */
-.workspace-v2 .inspector .detail-title{padding:10px 20px 8px}
-.workspace-v2 .inspector .detail-summary{padding:10px 20px 12px}
-.workspace-v2 .inspector .detail-group-head{padding-inline:20px}
-.workspace-v2 .inspector .detail-group-body{padding-inline:20px}
-.inspector-empty>.panel-heading{padding:0 20px}
+/* 素材详情内边距对齐左侧栏（左栏是 10px），不再额外往里收 */
+.workspace-v2 .inspector .detail-title{padding:10px 10px 8px}
+.workspace-v2 .inspector .detail-summary{padding:10px 10px 12px}
+.workspace-v2 .inspector .detail-group-head{padding-inline:10px}
+.workspace-v2 .inspector .detail-group-body{padding-inline:10px}
+.inspector-empty>.panel-heading{padding:0 10px}
+.workspace-v2 .inspector>.panel-heading{padding:0 10px}
+.workspace-v2 .inspector-content{padding:14px 10px}
