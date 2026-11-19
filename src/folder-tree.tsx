@@ -2,20 +2,14 @@ import React,{useMemo,useState} from 'react';
 import type {FolderNode} from './catalog-client';
 import {displayPath} from './catalog-client';
 
-/** 目录图标：展开时画成开口文件夹，收起时用闭合轮廓。 */
+/** 统一三角符号：展开朝下、折叠朝右；叶子目录用同形但压暗，不再分文件夹/文件图标。 */
 export function FolderGlyph({open}:{open:boolean}){
- return <svg className="folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-  {open
-   ?<><path d="M3 9V7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.4.6L11.4 7H19a2 2 0 0 1 2 2v1"/><path d="M3 9h17.2a1.6 1.6 0 0 1 1.56 1.96l-1.5 7.2A2 2 0 0 1 18.3 19.8H5.7a2 2 0 0 1-1.96-1.64L3 9z"/></>
-   :<path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.4.6L11.4 7H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>}
- </svg>;
+ return <svg className={`folder-icon tree-triangle${open?' is-open':''}`} viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M9 5.6 17.2 12 9 18.4z"/></svg>;
 }
 
-/** 文件图标：叶子目录直接挂素材，用「卷角文件 + 波形」表示，与文件夹区分。 */
+/** 无子目录的叶子：同一个三角，只是不旋转、颜色更淡。 */
 export function FileGlyph(){
- return <svg className="folder-icon file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-  <path d="M6 3h7l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M13 3v5h5"/><path d="M8 15.5v1M10.4 13.5v5M12.8 14.5v3M15.2 15.2v1"/>
- </svg>;
+ return <svg className="folder-icon tree-triangle is-leaf" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><path d="M9 5.6 17.2 12 9 18.4z"/></svg>;
 }
 
 import {treeClick} from './tree-click';
