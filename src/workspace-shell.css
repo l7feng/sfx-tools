@@ -323,3 +323,25 @@
 .inspector-empty>.panel-heading{padding:0 10px}
 .workspace-v2 .inspector>.panel-heading{padding:0 10px}
 .workspace-v2 .inspector-content{padding:14px 10px}
+
+/* 收藏 / 试听历史 / 标签 三个快捷入口不许自己滚动。
+   原因：这一行在 WebView2 里继承了 nav 的 overflow:auto，一旦横向溢出就会同时长出
+   横向 + 纵向经典滚动条（右侧那根带 ▴/▾ 的条就是它），行高被撑高约 17px、三个按钮
+   被挤窄，拖窗口跨过临界宽度时整行上下跳。这里把滚动彻底关掉，用 grid 三列硬撑。 */
+.workspace-v2 .sidebar nav.sidebar-shortcuts{display:grid;overflow:visible;scrollbar-width:none;-ms-overflow-style:none;min-width:0}
+.workspace-v2 .sidebar nav.sidebar-shortcuts::-webkit-scrollbar{display:none;width:0;height:0}
+.workspace-v2 .sidebar-shortcuts{overflow:visible;scrollbar-width:none}
+.workspace-v2 .sidebar-shortcuts::-webkit-scrollbar{display:none;width:0;height:0}
+/* 侧栏本身也不许滚动：滚动交给 .folder-tree（它已经 scrollbar-gutter:stable，宽度恒定） */
+.workspace-v2.catalog-shell .sidebar{overflow:hidden;scrollbar-gutter:auto}
+.workspace-v2.catalog-shell .sidebar-dock:not(.is-floating){overflow:hidden}
+@media (max-width:760px){
+.workspace-v2 .sidebar nav.sidebar-shortcuts{display:grid;overflow:visible}
+/* 断点处「整条侧栏上下跳 8px」的真凶：catalog.css 的 <=760 移动布局给 .catalog-shell .sidebar 加了
+   flex-direction:row + gap:8px。direction 已被下面的 workspace-v2 规则改回 column，但 gap 还留着，
+   于是标题 / 三个入口 / 路径目录 之间各多出 8px 的间距，跨断点拖窗口就上下跳。
+   这里用 (0,3,0) 的选择器把它压回 gap:0，并锁死侧栏宽度与各层高度。 */
+.workspace-v2.catalog-shell .sidebar{gap:0;flex-direction:column;width:var(--sidebar-width,220px);padding:0 10px 10px;border-right:1px solid var(--line);border-bottom:0}
+.workspace-v2.catalog-shell .sidebar>.panel-heading{height:32px;min-height:32px;max-height:32px}
+.workspace-v2.catalog-shell .sidebar nav.sidebar-shortcuts{display:grid;overflow:visible;height:32px;min-height:32px;max-height:32px}
+}

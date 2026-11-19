@@ -3176,7 +3176,7 @@ dependencies = [
 
 [[package]]
 name = "sfx-tools"
-version = "0.1.49"
+version = "0.1.50"
 dependencies = [
  "cpal",
  "drag",
