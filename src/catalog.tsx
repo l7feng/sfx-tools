@@ -306,7 +306,7 @@ function Catalog(){
         <div className="panel-heading-actions">
          <button onClick={toggleDock} title={floating?'停靠到左侧':'浮动为独立窗口'} aria-label={floating?'停靠到左侧':'浮动为独立窗口'}>{floating?'⇤':'⤢'}</button>
          <button onClick={()=>setShortcutsCompact(value=>!value)} aria-pressed={shortcutsCompact} title={shortcutsCompact?'展开快捷入口文字':'把快捷入口折叠为图标'} aria-label={shortcutsCompact?'展开快捷入口文字':'把快捷入口折叠为图标'}>{shortcutsCompact?'▤':'▦'}</button>
-         <button onClick={()=>toggle('leftCollapsed')} aria-label="折叠左侧素材栏">‹</button>
+         
         </div>
        </div>
        <nav className={`sidebar-shortcuts${shortcutsCompact?' is-compact':''}`} aria-label="素材导航">

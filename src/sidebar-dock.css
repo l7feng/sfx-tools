@@ -10,8 +10,8 @@
 .sidebar-dock.is-dragging{user-select:none}
 .sidebar-dock.is-dragging .sidebar-dock-grip{background:var(--accent-wash);cursor:grabbing}
 .sidebar-dock.is-dragging .panel-heading{cursor:grabbing}
-.panel-heading-actions{display:flex;align-items:center;gap:2px}
-.panel-heading-actions button{width:24px;min-width:24px;height:24px;min-height:24px;padding:0;font-size:14px;line-height:1;color:var(--muted)}
+.panel-heading-actions{display:flex;align-items:center;gap:4px;margin-left:auto}
+.panel-heading-actions button{width:22px;min-width:22px;height:22px;min-height:22px;padding:0;font-size:13px;line-height:1;color:var(--muted);border-radius:3px}
 .panel-heading-actions button:hover{color:var(--accent)}
 .sidebar-shortcuts .nav-glyph{display:none;width:14px;height:14px;flex:0 0 14px}
 
