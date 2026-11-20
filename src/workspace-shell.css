@@ -346,7 +346,19 @@
 .workspace-v2.catalog-shell .sidebar nav.sidebar-shortcuts{display:grid;overflow:visible;height:32px;min-height:32px;max-height:32px}
 }
 
-/* 常用路径标色同步到上方路径目录：文字与图标一起染色（值来自「常用路径」里选的颜色，内联在该行 style 上）。 */
-.workspace-v2.catalog-shell .sidebar .folder-row.is-pinned{font-weight:500}
-.workspace-v2.catalog-shell .sidebar .folder-row.is-pinned .folder-icon{color:currentColor;opacity:1}
-.workspace-v2.catalog-shell .sidebar .folder-row.is-pinned small{color:color-mix(in srgb,currentColor 62%,var(--muted))}
+/* 常用路径标色同步到上方路径目录：只用浅色遮罩，不染文字。
+   色源仍是「常用路径」里选的颜色（--pin-color），先把颜色往白里提亮 42% 抹掉饱和度，再按 24% 掺进底色，
+   得到比原色浅一档的柔和色块；左侧 2px 色条标示归属，色条本身也用提亮后的色。 */
+.workspace-v2.catalog-shell .sidebar .folder-row.is-pinned{
+  background:color-mix(in srgb,color-mix(in srgb,var(--pin-color) 42%,#fff) 24%,transparent);
+  box-shadow:inset 2px 0 0 color-mix(in srgb,color-mix(in srgb,var(--pin-color) 62%,#fff) 48%,transparent);
+  border-radius:4px;
+  font-weight:500;
+}
+.workspace-v2.catalog-shell .sidebar .folder-row.is-pinned:hover{
+  background:color-mix(in srgb,color-mix(in srgb,var(--pin-color) 48%,#fff) 32%,transparent);
+}
+.workspace-v2.catalog-shell .sidebar .folder-row.is-pinned.selected{
+  box-shadow:inset 2px 0 0 color-mix(in srgb,color-mix(in srgb,var(--pin-color) 70%,#fff) 62%,transparent);
+}
+

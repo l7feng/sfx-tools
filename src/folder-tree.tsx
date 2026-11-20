@@ -28,7 +28,7 @@ export function FolderTree({nodes,selected,onSelect,onContext,pinColors}:{nodes:
  function render(node:FolderNode,depth:number):React.ReactNode{
   const nested=children.get(node.path)??[];const open=!collapsed.has(node.path)&&(depth<2||expanded.has(node.path));
   const hasChild=!!nested.length;
-  // 常用路径的标记色沿用「常用路径」列表里选的颜色，直接染到这一行的文字与图标。
+  // 常用路径的标记色沿用「常用路径」列表里选的颜色，但只作为行底遮罩（--pin-color），不染文字。
   const pinColor=pinColors?.[node.path];
   const action=treeClick({hasChild,open,selected:selected===node.path});
   const onClick=()=>{
@@ -36,7 +36,7 @@ export function FolderTree({nodes,selected,onSelect,onContext,pinColors}:{nodes:
    if(action==='select-open'){onSelect(node.path);toggle(node.path,true);return;}
    toggle(node.path,open); // 已选中：再点标题＝收起/展开，选中不动
   };
-  return <li key={node.path}><button type="button" className={`folder-row${selected===node.path?' selected':''}${hasChild&&open?' is-open':''}${pinColor?' is-pinned':''}`} style={{paddingLeft:Math.min(depth,8)*12,...(pinColor?{color:pinColor}:{})}} aria-current={selected===node.path?'location':undefined} aria-expanded={hasChild?open:undefined} title={displayPath(node.path)} onContextMenu={event=>{if(onContext){event.preventDefault();event.stopPropagation();onContext(node.path,event);}}} onClick={onClick}>
+  return <li key={node.path}><button type="button" className={`folder-row${selected===node.path?' selected':''}${hasChild&&open?' is-open':''}${pinColor?' is-pinned':''}`} style={{paddingLeft:Math.min(depth,8)*12,...(pinColor?({'--pin-color':pinColor} as React.CSSProperties):{})}} aria-current={selected===node.path?'location':undefined} aria-expanded={hasChild?open:undefined} title={displayPath(node.path)} onContextMenu={event=>{if(onContext){event.preventDefault();event.stopPropagation();onContext(node.path,event);}}} onClick={onClick}>
    {hasChild?<FolderGlyph open={open}/>:<FileGlyph/>}
    <span className="folder-text">{node.name}</span>
    <small>{node.count}</small>
