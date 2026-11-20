@@ -61,7 +61,7 @@ export function Settings({open,onClose,value,onChange,onResetLayout,onOpenTool,l
     </>}
     {tab==='sound'&&<>
      <h3>音效库</h3>
-     {check('multilingualSearch','跨语言搜索（中 / 英 / 日）','输一种语言，同时搜中/英/日同义词；公式、格式、分类、标签、时长、收藏与播放列表筛选都不受影响')}
+     {check('multilingualSearch','跨语言搜索（中 / 英 / 日 / 韩）','输一种语言，同时搜中/英/日/韩同义词；公式、格式、分类、标签、时长、收藏与播放列表筛选都不受影响')}
      {check('metadataSearch','检索时包含内嵌元数据','默认开启；与搜索栏的「含元数据」按钮联动，任一处改动都会保存。关闭后只搜文件名。仅 WAV/BWF 的 bext 与 iXML 字段参与匹配，MP3、FLAC、AIFF、M4A 没有这些内嵌字段')}
      <p>本地静态词表，离线、不联网。词与词之间仍是「同时满足」，未登录词按字面匹配。</p>
      <p>内嵌元数据索引在导入／重扫时建立，BWF／iXML 回写后自动刷新；旧版本建立的库需重扫一次才能参与检索。两个搜索开关可以叠加，格式、分类、标签、时长、收藏与播放列表筛选都不受影响。</p>
