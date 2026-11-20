@@ -345,3 +345,8 @@
 .workspace-v2.catalog-shell .sidebar>.panel-heading{height:32px;min-height:32px;max-height:32px}
 .workspace-v2.catalog-shell .sidebar nav.sidebar-shortcuts{display:grid;overflow:visible;height:32px;min-height:32px;max-height:32px}
 }
+
+/* 常用路径标色同步到上方路径目录：文字与图标一起染色（值来自「常用路径」里选的颜色，内联在该行 style 上）。 */
+.workspace-v2.catalog-shell .sidebar .folder-row.is-pinned{font-weight:500}
+.workspace-v2.catalog-shell .sidebar .folder-row.is-pinned .folder-icon{color:currentColor;opacity:1}
+.workspace-v2.catalog-shell .sidebar .folder-row.is-pinned small{color:color-mix(in srgb,currentColor 62%,var(--muted))}

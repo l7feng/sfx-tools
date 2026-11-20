@@ -176,7 +176,7 @@ export function AssetDetail({asset,library='sound',groups=[],onChanged,onCollaps
     <button disabled={busy} onClick={()=>void copy(()=>invoke('source_copy',{ids:[asset.id],namesOnly:true}),'已复制文件名')}>复制文件名</button>
     <button disabled={busy} onClick={()=>void copy(()=>invoke('source_reveal',{id:asset.id}),'已在资源管理器中定位')}>在资源管理器中显示</button>
    </div>
-   <p className="detail-hint">素材库只保存路径引用，不会复制、移动或改写音频。</p>
+   <p className="detail-hint">音效库只保存路径引用，不会复制、移动或改写音频。</p>
   </Group>
 
   {notice&&<p className="detail-notice" role="status">{notice}</p>}

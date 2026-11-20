@@ -7,7 +7,7 @@ import {MUSIC_DIMENSIONS,defaultMusicFilterTemplates,parseTemplateValues} from '
 import {BackupSettings,CacheSettings,OutputDeviceSelect,TempSettings} from './settings-panels';
 
 const TABS:[string,string][]=[
- ['display','显示与布局'],['playback','音频试听'],['library','素材库'],
+ ['display','显示与布局'],['playback','音频试听'],['sound','音效库'],['music','音乐库'],
  ['cache','缓存与临时文件'],['backup','数据备份'],['plugins','模块开关'],['tools','账号'],['about','关于']
 ];
 const templateDrafts=(value:Record<string,string[]>)=>Object.fromEntries(MUSIC_DIMENSIONS.map(item=>[item.key,(value[item.key]??[]).join('，')]));
@@ -41,6 +41,7 @@ export function Settings({open,onClose,value,onChange,onResetLayout,onOpenTool,l
      <div className="theme-setting"><span className="theme-setting-label">强调色</span>{THEME_ACCENTS.length>1?<div className="theme-swatches" role="group" aria-label="强调色">{THEME_ACCENTS.map(item=><button key={item.value} type="button" className="theme-swatch" data-accent={item.value} aria-pressed={theme.accent===item.value} aria-label={item.label} title={item.label} onClick={()=>theme.setAccent(item.value)}/>)}</div>:<span className="theme-swatch-static" data-accent={theme.accent} aria-hidden="true"/>}<span className="theme-setting-value">{THEME_ACCENTS.find(item=>item.value===theme.accent)?.label??THEME_ACCENTS[0].label}</span></div>
      <label>底色<select value={theme.mode} onChange={event=>theme.setMode(event.target.value==='light'?'light':'dark')}><option value="dark">深色</option><option value="light">浅色</option></select></label>
      <label>波形配色<select value={value.waveColor} onChange={event=>set('waveColor',event.target.value as Preferences['waveColor'])}><option value="blue">蓝色</option><option value="white">白色</option></select></label>
+     <label>启动页面<select value={value.startPage} onChange={event=>set('startPage',event.target.value as Preferences['startPage'])}><option value="sound">音效库</option><option value="music">音乐库</option></select></label>
      <label>目录树行高<select value={value.treeDensity} onChange={event=>set('treeDensity',event.target.value==='standard'?'standard':'compact')}><option value="compact">紧凑 24px</option><option value="standard">标准 28px</option></select></label>
      {check('rememberLayout','记住面板折叠、比例和列宽','把工作区布局写入本机设置')}
      {check('simpleWaveform','列表小波形只画一条（更快）','仍显示整条音频，只是压缩成一条 512 峰的单色包络、不分左右声道；不会只画开头一段')}
@@ -58,18 +59,22 @@ export function Settings({open,onClose,value,onChange,onResetLayout,onOpenTool,l
      {check('stopOnDragToDaw','拖拽到 DAW 时停止试听','把素材拖出到 Pro Tools 等宿主前先停止本软件试听，避免同时占用声卡')}
      <p>小波形只在已分析范围内定位；点击小波形或播放按钮始终会试听，不受上面开关影响。</p>
     </>}
-    {tab==='library'&&<>
-     <h3>素材库</h3>
-     <label>启动页面<select value={value.startPage} onChange={event=>set('startPage',event.target.value as Preferences['startPage'])}><option value="sound">音效库</option><option value="music">音乐库</option></select></label>
+    {tab==='sound'&&<>
+     <h3>音效库</h3>
      {check('multilingualSearch','跨语言搜索（中 / 英 / 日）','输一种语言，同时搜中/英/日同义词；公式、格式、分类、标签、时长、收藏与播放列表筛选都不受影响')}
      {check('metadataSearch','检索时包含内嵌元数据','默认开启；与搜索栏的「含元数据」按钮联动，任一处改动都会保存。关闭后只搜文件名。仅 WAV/BWF 的 bext 与 iXML 字段参与匹配，MP3、FLAC、AIFF、M4A 没有这些内嵌字段')}
      <p>本地静态词表，离线、不联网。词与词之间仍是「同时满足」，未登录词按字面匹配。</p>
+     <p>内嵌元数据索引在导入／重扫时建立，BWF／iXML 回写后自动刷新；旧版本建立的库需重扫一次才能参与检索。两个搜索开关可以叠加，格式、分类、标签、时长、收藏与播放列表筛选都不受影响。</p>
+     <p>音效库只登记原路径引用：添加路径不会复制、移动或改写音频。同一文件可同时被音乐库引用，共用素材 ID 与标注。</p>
+    </>}
+    {tab==='music'&&<>
+     <h3>音乐库</h3>
+     <p>音乐库与音效库各自管理来源关系，共用素材 ID 与标注。这里只影响音乐库的筛选条与来源，不动音效库。</p>
      <h4 className="settings-subhead">音乐库筛选模板</h4>
      <p>音乐库筛选条每个维度的预置按钮，用逗号或顿号分隔；失焦即保存，清空表示该维度不显示预置。时长区间为内置值，不在此编辑。</p>
      <FilterTemplateEditor value={value.filterTemplates} onChange={next=>set('filterTemplates',next)}/>
      <button onClick={()=>set('filterTemplates',defaultMusicFilterTemplates())}>恢复默认筛选模板</button>
-     <p>内嵌元数据索引在导入／重扫时建立，BWF／iXML 回写后自动刷新；旧版本建立的素材库需重扫一次才能参与检索。两个搜索开关可以叠加，格式、分类、标签、时长、收藏与播放列表筛选都不受影响。</p>
-     <p>音效库和音乐库各自管理来源关系。相同文件可在两库引用，共用素材ID和标注；添加路径不会复制、移动或改写音频。</p>
+     <p>从音效库把已选素材「加入音乐库」不会复制文件，也不会改动音效库的记录。</p>
     </>}
     {tab==='cache'&&(native?<><CacheSettings active={open} library={library} folder={folder}/><hr className="settings-divider"/><TempSettings active={open}/></>:<p>缓存与临时文件设置仅在桌面版可用。</p>)}
     {tab==='backup'&&(native?<BackupSettings active={open}/>:<p>数据备份仅在桌面版可用。</p>)}

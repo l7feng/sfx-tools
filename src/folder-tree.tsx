@@ -14,7 +14,7 @@ export function FileGlyph(){
 
 import {treeClick} from './tree-click';
 
-export function FolderTree({nodes,selected,onSelect,onContext}:{nodes:FolderNode[];selected:string|null;onSelect:(path:string)=>void;onContext?:(path:string,event:React.MouseEvent)=>void}){
+export function FolderTree({nodes,selected,onSelect,onContext,pinColors}:{nodes:FolderNode[];selected:string|null;onSelect:(path:string)=>void;onContext?:(path:string,event:React.MouseEvent)=>void;pinColors?:Record<string,string>}){
  const [expanded,setExpanded]=useState(new Set<string>()),[collapsed,setCollapsed]=useState(new Set<string>());
  const {children,roots}=useMemo(()=>{
   const known=new Set(nodes.map(n=>n.path));const children=new Map<string,FolderNode[]>();const roots:FolderNode[]=[];
@@ -28,13 +28,15 @@ export function FolderTree({nodes,selected,onSelect,onContext}:{nodes:FolderNode
  function render(node:FolderNode,depth:number):React.ReactNode{
   const nested=children.get(node.path)??[];const open=!collapsed.has(node.path)&&(depth<2||expanded.has(node.path));
   const hasChild=!!nested.length;
+  // 常用路径的标记色沿用「常用路径」列表里选的颜色，直接染到这一行的文字与图标。
+  const pinColor=pinColors?.[node.path];
   const action=treeClick({hasChild,open,selected:selected===node.path});
   const onClick=()=>{
    if(action==='select'){onSelect(node.path);return;}
    if(action==='select-open'){onSelect(node.path);toggle(node.path,true);return;}
    toggle(node.path,open); // 已选中：再点标题＝收起/展开，选中不动
   };
-  return <li key={node.path}><button type="button" className={`folder-row${selected===node.path?' selected':''}${hasChild&&open?' is-open':''}`} style={{paddingLeft:Math.min(depth,8)*12}} aria-current={selected===node.path?'location':undefined} aria-expanded={hasChild?open:undefined} title={displayPath(node.path)} onContextMenu={event=>{if(onContext){event.preventDefault();event.stopPropagation();onContext(node.path,event);}}} onClick={onClick}>
+  return <li key={node.path}><button type="button" className={`folder-row${selected===node.path?' selected':''}${hasChild&&open?' is-open':''}${pinColor?' is-pinned':''}`} style={{paddingLeft:Math.min(depth,8)*12,...(pinColor?{color:pinColor}:{})}} aria-current={selected===node.path?'location':undefined} aria-expanded={hasChild?open:undefined} title={displayPath(node.path)} onContextMenu={event=>{if(onContext){event.preventDefault();event.stopPropagation();onContext(node.path,event);}}} onClick={onClick}>
    {hasChild?<FolderGlyph open={open}/>:<FileGlyph/>}
    <span className="folder-text">{node.name}</span>
    <small>{node.count}</small>

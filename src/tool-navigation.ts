@@ -20,7 +20,7 @@ export const toolPages = [
  {id:'ucs',label:'UCS 分类建议',description:'按描述或所选素材的名称、标签推断 CatID 与子类，逐条确认后写入标签，不自动改名。',keywords:'分类 标签 命名 整理 UCS',area:'library',kind:'local',status:'ready'},
  {id:'duplicates',label:'重复素材',description:'字节相同或波形与时长一致的重复项；只合并目录记录，源文件不移动、不删除。',keywords:'相同 SHA256 波形 时长 合并 清理 整理',area:'library',kind:'local',status:'ready'},
  {id:'layer',label:'叠层编排',description:'多素材叠加、散布与混音导出，单次最多 12 层，时长未知的片段自动跳过。',keywords:'叠层 散布 时间轴 渲染 制作',area:'library',kind:'local',status:'need'},
- {id:'maintenance',label:'素材库维护',description:'检查已登记文件的失联、变化与不可访问状态，保留标注，不自动删除记录。',keywords:'库 失联 路径 检测 导入 任务',area:'library',kind:'local',status:'ready'},
+ {id:'maintenance',label:'库维护',description:'检查已登记文件的失联、变化与不可访问状态，保留标注，不自动删除记录。',keywords:'库 失联 路径 检测 导入 任务',area:'library',kind:'local',status:'ready'},
  {id:'convert',label:'批量导出与转换',description:'原件副本导出、SoXR 重采样、保调变速；默认不覆盖同名文件。',keywords:'批量 导出 高质量 采样率 速度 制作',area:'production',kind:'local',status:'need'},
  {id:'plugins',label:'插件与制作连接',description:'扫描 VST3 候选；AAF / OMF 与宿主连接仍为只读骨架。',keywords:'VST3 DLL AAF OMF 插件 扫描 宿主',area:'production',kind:'local',status:'dev'},
  {id:'pt',label:'Pro Tools 导入预览',description:'检测连接与落点安排，不写工程、不批量渲染。',keywords:'PT Pro Tools 第三期 制作 导入',area:'production',kind:'local',status:'dev'},
@@ -36,7 +36,7 @@ export type ToolPage = typeof toolPages[number]['id'];
 export const toolEntries = toolPages as readonly ToolEntry[];
 
 export const toolGroups:{area:ToolArea;label:string}[]=[
- {area:'library',label:'素材库'},
+ {area:'library',label:'音效库'},
  {area:'production',label:'制作'},
  {area:'info',label:'信息'},
  {area:'extension',label:'扩展 · 链接'},

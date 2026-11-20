@@ -120,7 +120,8 @@ pub(crate) fn record_history(db:&Path,id:&str)->Result<(),String>{
     let mut conn=connection(db)?;let tx=conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(err)?;
     let changed=tx.execute("INSERT INTO play_history(asset_id,played_at) SELECT id,?2 FROM assets WHERE id=?1 ON CONFLICT(asset_id) DO UPDATE SET played_at=excluded.played_at",params![id,now()]).map_err(err)?;
     if changed==0{return Err("素材已出库，未记录试听历史。".into());}
-    tx.execute("DELETE FROM play_history WHERE asset_id NOT IN (SELECT asset_id FROM play_history ORDER BY played_at DESC,asset_id LIMIT 500)",[]).map_err(err)?;
+    // 试听历史只留最近 100 条：超出后淘汰最久未听的，避免冗余（前端「试听历史」页直接按此上限展示）。
+    tx.execute("DELETE FROM play_history WHERE asset_id NOT IN (SELECT asset_id FROM play_history ORDER BY played_at DESC,asset_id LIMIT 100)",[]).map_err(err)?;
     tx.commit().map_err(err)?;Ok(())
 }
 
