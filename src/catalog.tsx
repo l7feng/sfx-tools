@@ -209,7 +209,7 @@ function Catalog(){
  const dragMove=(event:React.PointerEvent<HTMLTableRowElement>,asset:CatalogAsset)=>{
   const origin=dragOrigin.current;if(!(event.buttons&1)){dragOrigin.current=null;return;}
   if(!origin||origin.id!==asset.id||origin.pointer!==event.pointerId||Math.hypot(event.clientX-origin.x,event.clientY-origin.y)<6)return;
-  dragOrigin.current=null;event.preventDefault();if(!native||dragOutLock.current)return;dragOutLock.current=true;dragOutActive.current=true;setSelected(asset);setError('');
+  dragOrigin.current=null;event.preventDefault();if(!native||dragOutLock.current)return;dragOutLock.current=true;dragOutActive.current=true;document.body.classList.add('is-drag-out');setSelected(asset);setError('');
   const ids=selection.includes(asset.id)?selection:[asset.id];
   // 图片#2：拖到 DAW 前停止本软件试听，避免与宿主同时占用输出设备。
   if(preferences.stopOnDragToDaw)void invoke('player_control',{action:'stop',value:null}).catch(()=>{});
@@ -221,10 +221,10 @@ function Catalog(){
    void invoke<string>('catalog_drag_processed',{jobId:armedHit.jobId,index:0}).then(message=>{if(alive.current)setStatus(`${armedLabels[armedHit.op]}结果 · ${message}`);}).catch(()=>{
     if(alive.current)setStatus(`${armedLabels[armedHit.op]}结果未就绪，本次拖出为原文件`);
     void invoke<string>('catalog_drag_many',{ids}).then(message=>{if(alive.current)setStatus(message);}).catch(e=>{if(alive.current)setError(String(e));});
-   }).finally(()=>{dragOutLock.current=false;dragOutGraceUntil.current=Date.now()+1500;dragOutActive.current=false;});
+   }).finally(()=>{document.body.classList.remove('is-drag-out');dragOutLock.current=false;dragOutGraceUntil.current=Date.now()+1500;dragOutActive.current=false;});
    return;
   }
-  void invoke<string>('catalog_drag_many',{ids}).then(message=>{if(alive.current)setStatus(message);}).catch(e=>{if(alive.current)setError(String(e));}).finally(()=>{dragOutLock.current=false;dragOutGraceUntil.current=Date.now()+1500;dragOutActive.current=false;});
+  void invoke<string>('catalog_drag_many',{ids}).then(message=>{if(alive.current)setStatus(message);}).catch(e=>{if(alive.current)setError(String(e));}).finally(()=>{document.body.classList.remove('is-drag-out');dragOutLock.current=false;dragOutGraceUntil.current=Date.now()+1500;dragOutActive.current=false;});
  };
  const sortState=safeSort(sort);
  /** 单元格内容：所有列都走同一入口，列设置里勾选/隐藏/排序后立即生效。 */
@@ -328,7 +328,7 @@ function Catalog(){
          </th>;
         })}</tr>
        </thead>
-       <tbody>{rows.map((asset,rowIndex)=><tr id={`asset-${asset.id}`} key={asset.id} onContextMenu={event=>contextAssets(asset,event)} draggable={false} onDragStart={event=>event.preventDefault()} onPointerDown={event=>{if(native&&event.isPrimary&&event.button===0)dragOrigin.current={id:asset.id,x:event.clientX,y:event.clientY,pointer:event.pointerId};}} onPointerMove={event=>dragMove(event,asset)} onPointerUp={()=>{dragOrigin.current=null;}} onPointerCancel={()=>{dragOrigin.current=null;}} onPointerLeave={()=>{dragOrigin.current=null;}} aria-selected={selection.includes(asset.id)} onClick={event=>choose(asset,event)}>{shownColumns.map(column=><td key={column.id} className={column.id==='wave'?'waveform-cell':['duration','rate','bpm','channels','index'].includes(column.id)?'mono':['favorite','playlist'].includes(column.id)?'is-narrow':''}>{renderCell(column.id,asset,rowIndex)}</td>)}</tr>)}</tbody>
+       <tbody>{rows.map((asset,rowIndex)=><tr id={`asset-${asset.id}`} key={asset.id} className={native&&asset.status==='ready'?'is-draggable':undefined} onContextMenu={event=>contextAssets(asset,event)} draggable={false} onDragStart={event=>event.preventDefault()} onPointerDown={event=>{if(native&&event.isPrimary&&event.button===0)dragOrigin.current={id:asset.id,x:event.clientX,y:event.clientY,pointer:event.pointerId};}} onPointerMove={event=>dragMove(event,asset)} onPointerUp={()=>{dragOrigin.current=null;document.body.classList.remove('is-drag-out');}} onPointerCancel={()=>{dragOrigin.current=null;document.body.classList.remove('is-drag-out');}} onPointerLeave={()=>{dragOrigin.current=null;}} aria-selected={selection.includes(asset.id)} onClick={event=>choose(asset,event)}>{shownColumns.map(column=><td key={column.id} className={column.id==='wave'?'waveform-cell':['duration','rate','bpm','channels','index'].includes(column.id)?'mono':['favorite','playlist'].includes(column.id)?'is-narrow':''}>{renderCell(column.id,asset,rowIndex)}</td>)}</tr>)}</tbody>
       </table>{!rows.length&&<div className="empty-state"><h2>{pageLoading?'正在读取素材…':query||format!=='全部格式'||favoritesOnly||tag||historyOnly||playlistId||extraTags.length||duration.min!==null||duration.max!==null?'没有匹配素材':`添加你的${library==='music'?'音乐':'音效'}素材`}</h2><p>{favoritesOnly||tag||historyOnly||playlistId||extraTags.length||duration.min!==null||duration.max!==null?'当前筛选下没有素材，可切换视图或清除筛选。':library==='music'?'可添加音乐文件夹，或从音效库把已选素材加入音乐库。':'选择文件夹后，只读扫描WAV、AIFF、FLAC、MP3、M4A。'}</p><button disabled={!native||busy||running} onClick={openImport}>添加素材文件夹</button></div>}</div>
      <div className="list-footer"><span>{rows.length} 条可见 / 共 {page.total} 条</span><div className="pager"><button aria-label="上一页" disabled={offset===0||busy||pageLoading} onClick={()=>{setOffset(Math.max(0,offset-PAGE_SIZE));setSelected(null);}}>‹</button><span>{Math.floor(loadedOffset/PAGE_SIZE)+1} / {Math.max(1,Math.ceil(page.total/PAGE_SIZE))}</span><button aria-label="下一页" disabled={offset+PAGE_SIZE>=page.total||busy||pageLoading} onClick={()=>{setOffset(offset+PAGE_SIZE);setSelected(null);}}>›</button></div></div></>}
    </main>

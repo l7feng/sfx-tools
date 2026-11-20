@@ -362,3 +362,9 @@
   box-shadow:inset 2px 0 0 color-mix(in srgb,color-mix(in srgb,var(--pin-color) 70%,#fff) 62%,transparent);
 }
 
+/* 0.1.53 拖拽光标首版：可拖出的列表行悬停张开手掌、按下握拳；拖出开始后整窗强制 grabbing，
+   避免原生拖出接管前光标还停在箭头。波形选区层保持十字定位，两端手柄单独抓取。 */
+.workspace-v2 tr.is-draggable{cursor:grab}
+.workspace-v2 tr.is-draggable:active{cursor:grabbing}
+.workspace-v2 tr.is-draggable .asset-name{cursor:grab}
+body.is-drag-out,body.is-drag-out *{cursor:grabbing!important}
